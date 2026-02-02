@@ -1,0 +1,95 @@
+#!/usr/bin/env node
+import { program } from 'commander';
+import chalk from 'chalk';
+import { createLoginCommand, createLogoutCommand, createStatusCommand } from './cli/login';
+import { createLsCommand } from './cli/ls';
+import { createUploadCommand } from './cli/upload';
+import { createDownloadCommand } from './cli/download';
+import { createMkdirCommand } from './cli/mkdir';
+import { setupShutdownHandlers } from './utils/shutdown';
+import { handleError } from './errors/handler';
+import { logger, LogLevel } from './utils/logger';
+
+// Setup graceful shutdown handlers
+setupShutdownHandlers();
+
+// Suppress OpenPGP.js debug output (expected decryption errors during key derivation)
+if (process.env.NODE_ENV !== 'development') {
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => {
+    // Filter out OpenPGP.js debug messages
+    if (args[0]?.includes?.('[OpenPGP.js debug]')) {
+      return;
+    }
+    originalConsoleError.apply(console, args);
+  };
+}
+
+// Handle unhandled rejections
+process.on('unhandledRejection', (error: unknown) => {
+  handleError(error, process.env.DEBUG === 'true');
+  process.exit(1);
+});
+
+// Handle uncaught exceptions (not covered by setupShutdownHandlers)
+process.on('uncaughtException', (error: unknown) => {
+  handleError(error, process.env.DEBUG === 'true');
+  process.exit(1);
+});
+
+program
+  .name('proton-drive')
+  .description(
+    chalk.blue.bold('Proton Drive CLI') +
+    '\n\nUpload and manage files in Proton Drive from the command line.'
+  )
+  .version('0.1.0', '-v, --version', 'Display version')
+  .option('-d, --debug', 'Enable debug output')
+  .option('--verbose', 'Show detailed output (default is minimal for scripting)')
+  .option('-q, --quiet', 'Suppress all non-error output')
+  .hook('preAction', (thisCommand) => {
+    const opts = thisCommand.opts();
+
+    // Set debug mode
+    if (opts.debug) {
+      process.env.DEBUG = 'true';
+      logger.setLevel(LogLevel.DEBUG);
+    }
+
+    // Set verbose mode
+    if (opts.verbose) {
+      process.env.VERBOSE = 'true';
+    }
+
+    // Set quiet mode (takes precedence)
+    if (opts.quiet) {
+      process.env.QUIET = 'true';
+    }
+  });
+
+// Add authentication commands
+program.addCommand(createLoginCommand());
+program.addCommand(createLogoutCommand());
+program.addCommand(createStatusCommand());
+
+// Add drive commands
+program.addCommand(createLsCommand());
+program.addCommand(createUploadCommand());
+program.addCommand(createDownloadCommand());
+program.addCommand(createMkdirCommand());
+
+// Custom help
+program.on('--help', () => {
+  console.log('');
+  console.log(chalk.bold('Examples:'));
+  console.log('  $ proton-drive login');
+  console.log('  $ proton-drive upload ./file.pdf /Documents');
+  console.log('  $ proton-drive ls /Documents');
+  console.log('  $ proton-drive download /Documents/file.pdf ./downloads/');
+  console.log('  $ proton-drive mkdir /NewFolder');
+  console.log('');
+  console.log(chalk.dim('For more information on a specific command:'));
+  console.log('  $ proton-drive <command> --help');
+});
+
+program.parse();

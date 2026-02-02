@@ -1,0 +1,176 @@
+import { AuthApiClient } from '../api/auth';
+import { SRPClient } from './srp';
+import { SessionManager } from './session';
+import { SessionCredentials } from '../types/auth';
+
+/**
+ * Main authentication service
+ * Handles login, session management, and token refresh
+ */
+export class AuthService {
+  private authApi: AuthApiClient;
+
+  constructor(apiBaseUrl?: string) {
+    this.authApi = new AuthApiClient(apiBaseUrl);
+  }
+
+  /**
+   * Authenticate with username and password using SRP protocol
+   * @param username - User's email address
+   * @param password - User's password
+   * @param captchaToken - Optional CAPTCHA token if required
+   * @returns Session credentials
+   */
+  async login(username: string, password: string, captchaToken?: string): Promise<SessionCredentials> {
+    try {
+      // Step 1: Get auth info (send CAPTCHA token if available - required for verification)
+      const authInfo = await this.authApi.getAuthInfo(username, captchaToken);
+
+      // Step 2: Compute SRP handshake
+      const handshake = await SRPClient.computeHandshake(
+        username,
+        password,
+        authInfo.Salt,
+        authInfo.Modulus,
+        authInfo.ServerEphemeral,
+        authInfo.Version,
+        authInfo.Username
+      );
+
+      // Step 3: Authenticate
+      const authResponse = await this.authApi.authenticate(
+        username,
+        handshake.clientEphemeral,
+        handshake.clientProof,
+        authInfo.SRPSession,
+        captchaToken
+      );
+
+      // Step 4: Verify server proof
+      if (!SRPClient.verifyServerProof(
+        authResponse.ServerProof,
+        handshake.expectedServerProof
+      )) {
+        throw new Error('Server authentication failed: invalid server proof');
+      }
+
+      // Step 5: Create session credentials
+      const session: SessionCredentials = {
+        sessionId: authResponse.UID,
+        uid: authResponse.UID,
+        accessToken: authResponse.AccessToken,
+        refreshToken: authResponse.RefreshToken,
+        scopes: authResponse.Scopes,
+        passwordMode: authResponse.PasswordMode,
+        mailboxPassword: password, // Store for crypto operations
+      };
+
+      // Step 6: Save session
+      await SessionManager.saveSession(session);
+      console.log('✓ Authentication successful');
+      console.log(`Session saved to: ${SessionManager.getSessionFilePath()}`);
+
+      return session;
+    } catch (error: any) {
+      // Preserve CAPTCHA error properties
+      if (error.requiresCaptcha) {
+        throw error; // Pass through CAPTCHA errors unchanged
+      }
+
+      if (error instanceof Error) {
+        throw new Error(`Login failed: ${error.message}`);
+      }
+      throw new Error('Login failed: Unknown error');
+    }
+  }
+
+  /**
+   * Get current session or throw error if not authenticated
+   * @returns Current session credentials
+   */
+  async getSession(): Promise<SessionCredentials> {
+    // Try to load existing session
+    const existingSession = await SessionManager.loadSession();
+    if (existingSession) {
+      // TODO: Check if token needs refresh
+      // For now, we assume the token is still valid
+      return existingSession;
+    }
+
+    throw new Error('No valid session found. Please login first using: proton-drive login');
+  }
+
+  /**
+   * Check if user is currently authenticated
+   * @returns True if authenticated
+   */
+  async isAuthenticated(): Promise<boolean> {
+    return await SessionManager.hasValidSession();
+  }
+
+  /**
+   * Refresh the access token using the refresh token
+   * @returns Updated session credentials
+   */
+  async refreshSession(): Promise<SessionCredentials> {
+    const currentSession = await SessionManager.loadSession();
+    if (!currentSession) {
+      throw new Error('No session found. Please login first.');
+    }
+
+    try {
+      const refreshResponse = await this.authApi.refreshToken(
+        currentSession.uid,
+        currentSession.refreshToken
+      );
+
+      // Update session with new tokens
+      const updatedSession: SessionCredentials = {
+        ...currentSession,
+        accessToken: refreshResponse.AccessToken,
+        refreshToken: refreshResponse.RefreshToken,
+      };
+
+      await SessionManager.saveSession(updatedSession);
+      console.log('✓ Access token refreshed');
+
+      return updatedSession;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Token refresh failed: ${error.message}`);
+      }
+      throw new Error('Token refresh failed: Unknown error');
+    }
+  }
+
+  /**
+   * Logout and clear the current session
+   */
+  async logout(): Promise<void> {
+    try {
+      // Try to revoke session on server
+      const session = await SessionManager.loadSession();
+      if (session) {
+        try {
+          await this.authApi.logout(session.accessToken);
+        } catch (error) {
+          // Ignore errors from server (session might be already invalid)
+          console.warn('Could not revoke session on server (this is normal if token is expired)');
+        }
+      }
+
+      // Clear local session
+      await SessionManager.clearSession();
+      console.log('✓ Logged out successfully');
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Logout failed: ${error.message}`);
+      }
+      throw new Error('Logout failed: Unknown error');
+    }
+  }
+}
+
+// Export session manager for direct access if needed
+export { SessionManager };
+export { SRPClient };

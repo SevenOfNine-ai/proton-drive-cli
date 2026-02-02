@@ -1,0 +1,156 @@
+import axios, { AxiosInstance } from 'axios';
+import { AuthInfoResponse, AuthResponse } from '../types/auth';
+
+/**
+ * Authentication API client for Proton API
+ * Handles SRP authentication flow with Proton's API
+ */
+export class AuthApiClient {
+  private client: AxiosInstance;
+  private baseUrl: string;
+
+  constructor(baseUrl: string = 'https://drive-api.proton.me') {
+    this.baseUrl = baseUrl;
+    this.client = axios.create({
+      baseURL: baseUrl,
+      timeout: 15000,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-pm-appversion': 'web-drive@5.2.0',
+      },
+    });
+  }
+
+  /**
+   * Get authentication info (Step 1 of SRP auth)
+   * @param username - User's email address
+   * @param captchaToken - Optional CAPTCHA verification token
+   * @returns Auth info including SRP parameters
+   */
+  async getAuthInfo(username: string, captchaToken?: string): Promise<AuthInfoResponse> {
+    try {
+      const headers: any = {};
+      if (captchaToken) {
+        // Proton API requires TWO separate headers for human verification
+        // See: https://github.com/ProtonMail/proton-python-client
+        headers['X-PM-Human-Verification-Token-Type'] = 'captcha';
+        headers['X-PM-Human-Verification-Token'] = captchaToken;
+        console.log(`[DEBUG] Sending CAPTCHA headers to getAuthInfo:`);
+        console.log(`  X-PM-Human-Verification-Token-Type: captcha`);
+      }
+
+      const response = await this.client.post<AuthInfoResponse>(
+        '/auth/v4/info',
+        { Username: username },
+        { headers }
+      );
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data?.Code === 9001) {
+        // CAPTCHA required
+        const details = error.response.data.Details;
+        console.error('\n[DEBUG getAuthInfo] Full CAPTCHA error details:', JSON.stringify(details, null, 2));
+        const captchaError: any = new Error('CAPTCHA verification required');
+        captchaError.requiresCaptcha = true;
+        captchaError.captchaUrl = details.WebUrl;
+        captchaError.captchaToken = details.HumanVerificationToken;
+        captchaError.verificationMethods = details.HumanVerificationMethods;
+        throw captchaError;
+      }
+
+      if (error.response) {
+        console.error('API Error Response:', JSON.stringify(error.response.data, null, 2));
+        console.error('Status:', error.response.status);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Authenticate with SRP proofs (Step 2 of SRP auth)
+   * @param username - User's email address
+   * @param clientEphemeral - Client ephemeral value (base64)
+   * @param clientProof - Client proof (base64)
+   * @param srpSession - SRP session ID from auth/info
+   * @param captchaToken - Optional CAPTCHA verification token
+   * @returns Authentication response with tokens
+   */
+  async authenticate(
+    username: string,
+    clientEphemeral: string,
+    clientProof: string,
+    srpSession: string,
+    captchaToken?: string
+  ): Promise<AuthResponse> {
+    try {
+      const headers: any = {};
+      if (captchaToken) {
+        // Proton API requires TWO separate headers for human verification
+        // See: https://github.com/ProtonMail/proton-python-client
+        headers['X-PM-Human-Verification-Token-Type'] = 'captcha';
+        headers['X-PM-Human-Verification-Token'] = captchaToken;
+        console.log(`[DEBUG] Sending CAPTCHA headers to authenticate():`);
+        console.log(`  X-PM-Human-Verification-Token-Type: captcha`);
+      }
+
+      const response = await this.client.post<AuthResponse>(
+        '/auth/v4',
+        {
+          Username: username,
+          ClientEphemeral: clientEphemeral,
+          ClientProof: clientProof,
+          SRPSession: srpSession,
+        },
+        { headers }
+      );
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data?.Code === 9001) {
+        // CAPTCHA required
+        const details = error.response.data.Details;
+        console.error('\n[DEBUG authenticate] Full CAPTCHA error details:', JSON.stringify(details, null, 2));
+        const captchaError: any = new Error('CAPTCHA verification required');
+        captchaError.requiresCaptcha = true;
+        captchaError.captchaUrl = details.WebUrl;
+        captchaError.captchaToken = details.HumanVerificationToken;
+        captchaError.verificationMethods = details.HumanVerificationMethods;
+        throw captchaError;
+      }
+
+      if (error.response) {
+        console.error('API Error Response:', JSON.stringify(error.response.data, null, 2));
+        console.error('Status:', error.response.status);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Refresh access token using refresh token
+   * @param uid - User ID
+   * @param refreshToken - Refresh token
+   * @returns New access and refresh tokens
+   */
+  async refreshToken(
+    uid: string,
+    refreshToken: string
+  ): Promise<{ AccessToken: string; RefreshToken: string }> {
+    const response = await this.client.post('/auth/v4/refresh', {
+      UID: uid,
+      RefreshToken: refreshToken,
+    });
+    return response.data;
+  }
+
+  /**
+   * Logout and revoke current session
+   * @param accessToken - Current access token
+   */
+  async logout(accessToken: string): Promise<void> {
+    await this.client.delete('/auth/v4', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+  }
+}

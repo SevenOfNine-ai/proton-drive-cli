@@ -1,0 +1,72 @@
+{
+  "name": "proton-drive-cli",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "description": "Command-line interface for Proton Drive with end-to-end encrypted file operations",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "watch": "tsc --watch",
+    "install-global": "npm run build && npm link",
+    "uninstall-global": "npm unlink -g proton-drive-cli",
+    "prepare": "npm run build",
+    "package": "npm run build && npm pack"
+  },
+  "bin": {
+    "proton-drive": "./dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "proton",
+    "drive",
+    "cli",
+    "upload",
+    "download",
+    "encryption",
+    "e2ee"
+  ],
+  "author": "Proton Drive CLI Contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@swc/cli": "^0.7.9",
+    "@swc/core": "^1.15.3",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.9",
+    "@types/jwt-decode": "^2.2.1",
+    "@types/mime-types": "^3.0.1",
+    "@types/node": "^24.10.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "@protontech/openpgp": "^6.2.2",
+    "@protontech/pmcrypto": "^8.8.1",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "boxen": "^7.1.1",
+    "chalk": "^5.6.2",
+    "cli-progress": "^3.12.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.2",
+    "dotenv": "^17.2.3",
+    "fs-extra": "^11.3.2",
+    "inquirer": "^8.2.7",
+    "jwt-decode": "^4.0.0",
+    "mime-types": "^3.0.2",
+    "ora": "^9.0.0",
+    "p-limit": "^7.2.0",
+    "p-retry": "^7.1.0"
+  }
+}
