@@ -6,6 +6,7 @@ import { createLsCommand } from './cli/ls';
 import { createUploadCommand } from './cli/upload';
 import { createDownloadCommand } from './cli/download';
 import { createMkdirCommand } from './cli/mkdir';
+import { createBridgeCommand } from './cli/bridge';
 import { setupShutdownHandlers } from './utils/shutdown';
 import { handleError } from './errors/handler';
 import { logger, LogLevel } from './utils/logger';
@@ -77,6 +78,9 @@ program.addCommand(createLsCommand());
 program.addCommand(createUploadCommand());
 program.addCommand(createDownloadCommand());
 program.addCommand(createMkdirCommand());
+
+// Add bridge command (for Git LFS integration)
+program.addCommand(createBridgeCommand());
 
 // Custom help
 program.on('--help', () => {

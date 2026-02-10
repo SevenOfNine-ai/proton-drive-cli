@@ -10,10 +10,10 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "watch": "tsc --watch",
-    "install-global": "npm run build && npm link",
-    "uninstall-global": "npm unlink -g proton-drive-cli",
-    "prepare": "npm run build",
-    "package": "npm run build && npm pack"
+    "install-global": "yarn build && yarn link",
+    "uninstall-global": "yarn unlink",
+    "prepare": "yarn build",
+    "package": "yarn build && yarn pack"
   },
   "bin": {
     "proton-drive": "./dist/index.js"
@@ -34,6 +34,7 @@
   ],
   "author": "Proton Drive CLI Contributors",
   "license": "MIT",
+  "packageManager": "yarn@4.1.1",
   "engines": {
     "node": ">=18.0.0"
   },
