@@ -2,6 +2,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { homedir } from 'os';
 import { SessionCredentials } from '../types/auth';
+import { logger } from '../utils/logger';
 
 /**
  * Session manager for storing and retrieving authentication credentials
@@ -21,11 +22,14 @@ export class SessionManager {
       // Ensure directory exists
       await fs.ensureDir(SESSION_DIR);
 
-      // Write session data
-      await fs.writeJson(SESSION_FILE, session, { spaces: 2 });
+      // Strip mailboxPassword — passwords are never persisted to disk.
+      // The password flows via stdin on every bridge invocation (from pass-cli).
+      const { mailboxPassword, ...safeSession } = session as any;
 
-      // Set restrictive permissions (600 - read/write for owner only)
-      await fs.chmod(SESSION_FILE, 0o600);
+      // Write atomically: temp file with restrictive mode, then rename
+      const tmpFile = SESSION_FILE + '.tmp';
+      await fs.writeJson(tmpFile, safeSession, { spaces: 2, mode: 0o600 });
+      await fs.move(tmpFile, SESSION_FILE, { overwrite: true });
     } catch (error) {
       throw new Error(`Failed to save session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -44,12 +48,12 @@ export class SessionManager {
         if (this.isValidSession(session)) {
           return session;
         } else {
-          console.warn('Session file is corrupted or invalid. Please login again.');
+          logger.warn('Session file is corrupted or invalid. Please login again.');
           return null;
         }
       }
     } catch (error) {
-      console.error('Failed to load session:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Failed to load session:', error instanceof Error ? error.message : 'Unknown error');
     }
     return null;
   }

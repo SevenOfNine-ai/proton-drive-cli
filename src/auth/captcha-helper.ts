@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from 'process';
 import * as fs from 'fs';
 import * as tty from 'tty';
 import axios from 'axios';
+import { logger } from '../utils/logger';
 
 /**
  * Helper for CAPTCHA verification
@@ -97,7 +98,7 @@ async function createReadlineInterface(): Promise<{ rl: readline.Interface; clea
 async function fetchPrefixValues(challengeToken: string): Promise<{ prefix1: string; prefix2: string } | null> {
     const captchaUrl = `${PROTON_API_BASE}/core/v4/captcha?Token=${encodeURIComponent(challengeToken)}&ForceWebMessaging=1`;
 
-    console.log(`[DEBUG] Fetching captcha page to extract prefixes...`);
+    logger.debug(`Fetching captcha page to extract prefixes...`);
 
     try {
         const response = await axios.get(captchaUrl, {
@@ -114,19 +115,19 @@ async function fetchPrefixValues(challengeToken: string): Promise<{ prefix1: str
         const tokenCallbackMatch = html.match(/sendToken\s*\(\s*['"]([^'"]+)['"]\s*\+\s*['"]([^'"]+)['"]\s*\+\s*response\s*\)/);
 
         if (!tokenCallbackMatch) {
-            console.error('[DEBUG] Could not parse prefix values from captcha page');
+            logger.debug('Could not parse prefix values from captcha page');
             return null;
         }
 
         const prefix1 = tokenCallbackMatch[1];
         const prefix2 = tokenCallbackMatch[2];
 
-        console.log(`[DEBUG] Extracted prefix1: ${prefix1}`);
-        console.log(`[DEBUG] Extracted prefix2: ${prefix2}`);
+        logger.debug(`Extracted prefix1: ${prefix1}`);
+        logger.debug(`Extracted prefix2: ${prefix2}`);
 
         return { prefix1, prefix2 };
     } catch (error: any) {
-        console.error('[DEBUG] Failed to fetch captcha page:', error.message);
+        logger.debug('Failed to fetch captcha page:', error.message);
         return null;
     }
 }
@@ -175,7 +176,7 @@ async function semiAutomatedExtraction(captchaUrl: string, challengeToken: strin
 
         // Check if user pasted the full token (contains a colon)
         if (finalizeToken.includes(':')) {
-            console.log('\n[DEBUG] User provided full token, using as-is');
+            logger.debug('User provided full token, using as-is');
             return finalizeToken.trim();
         }
 

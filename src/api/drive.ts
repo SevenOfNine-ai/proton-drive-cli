@@ -184,6 +184,7 @@ export class DriveApiClient {
           headers: {
             'Content-Type': 'application/json',
             'x-pm-appversion': 'web-drive@5.2.0',
+            'x-pm-uid': currentSession.uid,
           },
           timeout: 15000,
         }

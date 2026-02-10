@@ -210,10 +210,12 @@ src/
 
 ## Security
 
-- Passwords are never stored - only encrypted session tokens
+- Session file stores revocable tokens only. Passwords are never persisted to disk.
+- The mailbox password must be provided on every operation via `--password`, `PROTON_PASSWORD` env var, or interactive prompt.
+- Credential flow (Git LFS mode): pass-cli -> Go adapter -> stdin -> proton-drive-cli (memory only)
 - All encryption happens locally before upload
 - Private keys are decrypted in memory and never written to disk
-- Session files store encrypted credentials with appropriate permissions
+- Session files store tokens with 0600 permissions
 
 
 ## License

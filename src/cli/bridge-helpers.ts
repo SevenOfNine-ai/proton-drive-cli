@@ -6,6 +6,10 @@
 import { DriveClient } from '../drive/client';
 import { logger } from '../utils/logger';
 
+// Re-export canonical oidToPath/pathToOid from bridge/validators (no heavy deps)
+export { oidToPath, pathToOid } from '../bridge/validators';
+import { oidToPath } from '../bridge/validators';
+
 /**
  * Listing result item (simplified from DriveClient internals)
  */
@@ -14,76 +18,6 @@ export interface ListItem {
   type: 'file' | 'folder';
   size: number;
   modifiedTime: number;
-}
-
-/**
- * Convert Git LFS OID to Proton Drive path
- * Uses 2-character prefix directories for distribution (same as Git LFS)
- *
- * @param storageBase - Base directory in Drive (e.g., "LFS")
- * @param oid - Git LFS object ID (64-character hex string)
- * @returns Full path in Drive (e.g., "/LFS/ab/c123...")
- *
- * @example
- * oidToPath("LFS", "abc123...64chars") => "/LFS/ab/c123...62chars"
- */
-export function oidToPath(storageBase: string, oid: string): string {
-  if (!oid || oid.length < 2) {
-    throw new Error(`Invalid OID: must be at least 2 characters, got: ${oid}`);
-  }
-
-  // Validate OID format (64-character hex string)
-  if (!/^[a-f0-9]{64}$/i.test(oid)) {
-    throw new Error(`Invalid OID format: expected 64-character hex string, got: ${oid}`);
-  }
-
-  // Normalize storage base (remove leading/trailing slashes)
-  const normalizedBase = storageBase.replace(/^\/+|\/+$/g, '');
-
-  // Extract prefix (first 2 characters) and remaining portion
-  const prefix = oid.substring(0, 2).toLowerCase();
-  const remaining = oid.substring(2).toLowerCase();
-
-  // Build path: /base/prefix/remaining
-  return `/${normalizedBase}/${prefix}/${remaining}`;
-}
-
-/**
- * Extract OID from Proton Drive path
- * Reverses oidToPath operation
- *
- * @param filePath - Full path in Drive (e.g., "/LFS/ab/c123...")
- * @returns OID (64-character hex string)
- *
- * @example
- * pathToOid("/LFS/ab/c123...") => "abc123..."
- */
-export function pathToOid(filePath: string): string {
-  // Remove leading slash and split
-  const parts = filePath.replace(/^\/+/, '').split('/');
-
-  if (parts.length < 3) {
-    throw new Error(`Invalid OID path format: ${filePath}`);
-  }
-
-  // parts[0] = base (e.g., "LFS")
-  // parts[1] = prefix (e.g., "ab")
-  // parts[2] = remaining (e.g., "c123...")
-  const prefix = parts[1];
-  const remaining = parts[2];
-
-  if (prefix.length !== 2) {
-    throw new Error(`Invalid prefix in path: ${filePath}`);
-  }
-
-  const oid = prefix + remaining;
-
-  // Validate reconstructed OID
-  if (!/^[a-f0-9]{64}$/i.test(oid)) {
-    throw new Error(`Invalid OID reconstructed from path: ${oid}`);
-  }
-
-  return oid.toLowerCase();
 }
 
 /**
@@ -228,18 +162,29 @@ export async function listOids(
   const normalizedBase = storageBase.replace(/^\/+|\/+$/g, '');
   const basePath = `/${normalizedBase}`;
 
-  // If prefix specified, list just that folder
+  // If prefix specified, list just that prefix folder's second-level subfolders
   if (prefix) {
     if (prefix.length !== 2) {
       throw new Error(`Invalid prefix: must be 2 characters, got: ${prefix}`);
     }
 
     const prefixPath = `${basePath}/${prefix}`;
+    const oids: string[] = [];
     try {
-      const items = await listFolder(client, prefixPath);
-      return items
-        .filter((item) => item.type === 'file')
-        .map((item) => prefix + item.name.toLowerCase());
+      const secondFolders = await listFolder(client, prefixPath);
+      for (const secondFolder of secondFolders) {
+        if (secondFolder.type !== 'folder' || secondFolder.name.length !== 2) {
+          continue;
+        }
+        const secondPath = `${prefixPath}/${secondFolder.name}`;
+        const items = await listFolder(client, secondPath);
+        for (const item of items) {
+          if (item.type === 'file') {
+            oids.push(item.name.toLowerCase());
+          }
+        }
+      }
+      return oids;
     } catch (error: any) {
       if (error?.message?.includes('not found') || error?.message?.includes('Not found')) {
         return [];
@@ -248,7 +193,7 @@ export async function listOids(
     }
   }
 
-  // List all prefix folders and aggregate OIDs
+  // List all prefix folders → second-level folders → files
   const allOids: string[] = [];
   try {
     const prefixFolders = await listFolder(client, basePath);
@@ -259,11 +204,20 @@ export async function listOids(
       }
 
       const prefixPath = `${basePath}/${folder.name}`;
-      const items = await listFolder(client, prefixPath);
+      const secondFolders = await listFolder(client, prefixPath);
 
-      for (const item of items) {
-        if (item.type === 'file') {
-          allOids.push(folder.name.toLowerCase() + item.name.toLowerCase());
+      for (const secondFolder of secondFolders) {
+        if (secondFolder.type !== 'folder' || secondFolder.name.length !== 2) {
+          continue;
+        }
+
+        const secondPath = `${prefixPath}/${secondFolder.name}`;
+        const items = await listFolder(client, secondPath);
+
+        for (const item of items) {
+          if (item.type === 'file') {
+            allOids.push(item.name.toLowerCase());
+          }
         }
       }
     }

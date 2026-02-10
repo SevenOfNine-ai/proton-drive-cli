@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { AuthInfoResponse, AuthResponse } from '../types/auth';
+import { logger } from '../utils/logger';
 
 /**
  * Authentication API client for Proton API
@@ -35,8 +36,8 @@ export class AuthApiClient {
         // See: https://github.com/ProtonMail/proton-python-client
         headers['X-PM-Human-Verification-Token-Type'] = 'captcha';
         headers['X-PM-Human-Verification-Token'] = captchaToken;
-        console.log(`[DEBUG] Sending CAPTCHA headers to getAuthInfo:`);
-        console.log(`  X-PM-Human-Verification-Token-Type: captcha`);
+        logger.debug(`Sending CAPTCHA headers to getAuthInfo`);
+        logger.debug(`  X-PM-Human-Verification-Token-Type: captcha`);
       }
 
       const response = await this.client.post<AuthInfoResponse>(
@@ -49,7 +50,7 @@ export class AuthApiClient {
       if (error.response?.data?.Code === 9001) {
         // CAPTCHA required
         const details = error.response.data.Details;
-        console.error('\n[DEBUG getAuthInfo] Full CAPTCHA error details:', JSON.stringify(details, null, 2));
+        logger.debug('getAuthInfo CAPTCHA error details:', JSON.stringify(details, null, 2));
         const captchaError: any = new Error('CAPTCHA verification required');
         captchaError.requiresCaptcha = true;
         captchaError.captchaUrl = details.WebUrl;
@@ -59,8 +60,8 @@ export class AuthApiClient {
       }
 
       if (error.response) {
-        console.error('API Error Response:', JSON.stringify(error.response.data, null, 2));
-        console.error('Status:', error.response.status);
+        logger.debug('API Error Response:', JSON.stringify(error.response.data, null, 2));
+        logger.debug('Status:', error.response.status);
       }
       throw error;
     }
@@ -89,8 +90,8 @@ export class AuthApiClient {
         // See: https://github.com/ProtonMail/proton-python-client
         headers['X-PM-Human-Verification-Token-Type'] = 'captcha';
         headers['X-PM-Human-Verification-Token'] = captchaToken;
-        console.log(`[DEBUG] Sending CAPTCHA headers to authenticate():`);
-        console.log(`  X-PM-Human-Verification-Token-Type: captcha`);
+        logger.debug(`Sending CAPTCHA headers to authenticate()`);
+        logger.debug(`  X-PM-Human-Verification-Token-Type: captcha`);
       }
 
       const response = await this.client.post<AuthResponse>(
@@ -108,7 +109,7 @@ export class AuthApiClient {
       if (error.response?.data?.Code === 9001) {
         // CAPTCHA required
         const details = error.response.data.Details;
-        console.error('\n[DEBUG authenticate] Full CAPTCHA error details:', JSON.stringify(details, null, 2));
+        logger.debug('authenticate CAPTCHA error details:', JSON.stringify(details, null, 2));
         const captchaError: any = new Error('CAPTCHA verification required');
         captchaError.requiresCaptcha = true;
         captchaError.captchaUrl = details.WebUrl;
@@ -118,8 +119,8 @@ export class AuthApiClient {
       }
 
       if (error.response) {
-        console.error('API Error Response:', JSON.stringify(error.response.data, null, 2));
-        console.error('Status:', error.response.status);
+        logger.debug('API Error Response:', JSON.stringify(error.response.data, null, 2));
+        logger.debug('Status:', error.response.status);
       }
       throw error;
     }
@@ -138,6 +139,11 @@ export class AuthApiClient {
     const response = await this.client.post('/auth/v4/refresh', {
       UID: uid,
       RefreshToken: refreshToken,
+      ResponseType: 'token',
+      GrantType: 'refresh_token',
+      RedirectURI: 'http://proton.me',
+    }, {
+      headers: { 'x-pm-uid': uid },
     });
     return response.data;
   }

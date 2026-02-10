@@ -29,7 +29,8 @@ export interface SessionCredentials {
   refreshToken: string;
   scopes: string[];
   passwordMode: number;
-  mailboxPassword?: string; // Stored for crypto operations (encrypted storage recommended in production)
+  // mailboxPassword is intentionally NOT persisted — it flows via stdin
+  // from pass-cli on every invocation and stays in memory only.
 }
 
 export interface SRPHandshake {

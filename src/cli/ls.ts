@@ -7,6 +7,7 @@ import { Node } from '../types/drive';
 import { formatSize, formatDate, getNodeIcon } from '../drive/utils';
 import { handleError } from '../errors/handler';
 import { isVerbose, isQuiet, outputResult } from '../utils/output';
+import { resolvePassword } from '../utils/password';
 
 /**
  * Create the ls command
@@ -18,15 +19,19 @@ export function createLsCommand(): Command {
     .description('List files and folders in your Proton Drive')
     .argument('[path]', 'Path to list (defaults to root "/")', '/')
     .option('-l, --long', 'Use long listing format with details')
+    .option('--password <password>', 'Password for key decryption (or set PROTON_PASSWORD)')
     .action(async (path: string, options) => {
       try {
+        // Resolve password for key decryption
+        const password = await resolvePassword(options);
+
         // Create and initialize drive client
         let spinner;
         if (isVerbose()) {
           spinner = ora('Loading folder contents...').start();
         }
         const client = createDriveClient();
-        await client.initializeFromSession();
+        await client.initializeFromSession(password);
 
         // Resolve path - this returns the folder with its decrypted context
         const resolved = await client.paths().resolvePath(path);

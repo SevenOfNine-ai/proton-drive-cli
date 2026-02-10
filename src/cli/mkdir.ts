@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { createDriveClient } from '../drive/client';
 import chalk from 'chalk';
+import { resolvePassword } from '../utils/password';
 
 /**
  * Create mkdir command
@@ -14,15 +15,19 @@ export function createMkdirCommand(): Command {
     .argument('<path>', 'Path where to create the folder (e.g., /Documents)')
     .argument('<folder-name>', 'Name of the folder to create')
     .option('-p, --parents', 'Create parent directories as needed (not implemented yet)')
+    .option('--password <password>', 'Password for key decryption (or set PROTON_PASSWORD)')
     .action(async (path: string, folderName: string, options) => {
       try {
         if (options.parents) {
           console.log(chalk.yellow('Warning: -p/--parents option is not yet implemented'));
         }
 
+        // Resolve password for key decryption
+        const password = await resolvePassword(options);
+
         // Initialize Drive client
         const client = createDriveClient();
-        await client.initializeFromSession();
+        await client.initializeFromSession(password);
 
         console.log(chalk.cyan(`Creating folder "${folderName}" at ${path}...`));
 

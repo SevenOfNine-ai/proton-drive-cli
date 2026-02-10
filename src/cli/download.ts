@@ -4,6 +4,7 @@ import ora from 'ora';
 import { createDriveClient } from '../drive/client';
 import { handleError } from '../errors/handler';
 import { isVerbose, isQuiet, outputResult } from '../utils/output';
+import { resolvePassword } from '../utils/password';
 
 /**
  * Create the download command
@@ -14,6 +15,7 @@ export function createDownloadCommand(): Command {
     .argument('<source>', 'Source path in Drive (e.g., /Documents/file.pdf)')
     .argument('<output>', 'Output path on local filesystem (e.g., ./file.pdf)')
     .option('--skip-verification', 'Skip manifest signature verification (not recommended)')
+    .option('--password <password>', 'Password for key decryption (or set PROTON_PASSWORD)')
     .action(downloadCommand);
 }
 
@@ -24,6 +26,9 @@ export function createDownloadCommand(): Command {
  */
 async function downloadCommand(sourcePath: string, outputPath: string, options: any) {
   try {
+    // Resolve password for key decryption
+    const password = await resolvePassword(options);
+
     // Initialize Drive client with spinner in verbose mode
     let initSpinner;
     if (isVerbose()) {
@@ -31,7 +36,7 @@ async function downloadCommand(sourcePath: string, outputPath: string, options: 
     }
 
     const driveClient = createDriveClient();
-    await driveClient.initializeFromSession();
+    await driveClient.initializeFromSession(password);
 
     if (initSpinner) {
       initSpinner.succeed('Drive client initialized');

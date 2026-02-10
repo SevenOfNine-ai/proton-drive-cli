@@ -14,38 +14,18 @@ import { AuthService } from '../auth';
 import { ErrorCode } from '../errors/types';
 import { logger, LogLevel } from '../utils/logger';
 import {
-  oidToPath,
   ensureOidFolder,
   findFileByOid,
   listFolder,
 } from './bridge-helpers';
-
-/**
- * Bridge request payload from stdin
- */
-interface BridgeRequest {
-  username?: string;
-  password?: string;
-  dataPassword?: string;
-  secondFactorCode?: string;
-  appVersion?: string;
-  oid?: string;
-  path?: string;
-  outputPath?: string;
-  folder?: string;
-  storageBase?: string;
-}
-
-/**
- * Bridge response envelope
- */
-interface BridgeResponse {
-  ok: boolean;
-  payload?: any;
-  error?: string;
-  code?: number;
-  details?: string;
-}
+import {
+  BridgeRequest,
+  BridgeResponse,
+  validateOid,
+  validateLocalPath,
+  errorToStatusCode,
+  oidToPath,
+} from '../bridge/validators';
 
 /**
  * Write JSON response to stdout (single line, no extra output)
@@ -96,73 +76,30 @@ async function readStdinJson(): Promise<BridgeRequest> {
   });
 }
 
-/**
- * Map error to HTTP status code
- */
-function errorToStatusCode(error: any): number {
-  const code = error?.code;
-  if (code === ErrorCode.AUTH_FAILED || code === ErrorCode.INVALID_CREDENTIALS) return 401;
-  if (code === ErrorCode.SESSION_EXPIRED) return 401;
-  if (code === ErrorCode.TWO_FACTOR_REQUIRED) return 401;
-  if (code === ErrorCode.NOT_FOUND || code === ErrorCode.PATH_NOT_FOUND || code === ErrorCode.FILE_NOT_FOUND) return 404;
-  if (code === ErrorCode.INVALID_FILE || code === ErrorCode.VALIDATION_ERROR || code === ErrorCode.INVALID_PATH) return 400;
-  if (code === ErrorCode.FILE_TOO_LARGE) return 413;
-  if (code === ErrorCode.RATE_LIMITED) return 429;
-  if (code === ErrorCode.OPERATION_CANCELLED) return 499;
-  if (code === ErrorCode.TIMEOUT) return 504;
-
-  const msg = error?.message?.toLowerCase() || '';
-  if (msg.includes('not found')) return 404;
-  if (msg.includes('unauthorized') || msg.includes('login failed')) return 401;
-  if (msg.includes('invalid')) return 400;
-  return 500;
-}
-
-/**
- * Validate OID format (64-character lowercase hex)
- */
-function validateOid(oid: string): void {
-  if (!oid || typeof oid !== 'string') {
-    throw new Error('OID is required');
-  }
-  if (!/^[a-f0-9]{64}$/i.test(oid)) {
-    throw new Error('Invalid OID format: expected 64-character hex string');
-  }
-}
-
-/**
- * Validate that a local file path doesn't contain traversal attempts
- */
-function validateLocalPath(filePath: string): void {
-  if (!filePath || typeof filePath !== 'string') {
-    throw new Error('File path is required');
-  }
-  const resolved = path.resolve(filePath);
-  if (resolved !== filePath && !path.isAbsolute(filePath)) {
-    // Allow relative paths but ensure no traversal tricks
-    const normalized = path.normalize(filePath);
-    if (normalized.includes('..')) {
-      throw new Error('Path traversal not allowed');
-    }
-  }
-}
+// Re-export validators for existing consumers (e.g., bridge.test.ts)
+export { BridgeRequest, BridgeResponse, validateOid, validateLocalPath, errorToStatusCode } from '../bridge/validators';
 
 /**
  * Initialize DriveClient, authenticating if necessary.
- * Returns an initialized client ready for operations.
+ * Password is always required — it flows via stdin from pass-cli
+ * and is never read from the session file.
  */
 async function getInitializedClient(request: BridgeRequest): Promise<DriveClient> {
   const client = createDriveClient();
+  const password = request.password;
 
-  // Try existing session first
+  // Try existing session tokens + stdin password for crypto
   try {
-    await client.initializeFromSession();
-    return client;
+    if (password) {
+      await client.initializeFromSession(password);
+      return client;
+    }
   } catch (_) {
-    // No valid session — need credentials
+    // No valid session — need full login
   }
 
-  if (!request.username || !request.password) {
+  // Need full login
+  if (!request.username || !password) {
     throw Object.assign(
       new Error('No session found and credentials not provided'),
       { code: ErrorCode.AUTH_FAILED }
@@ -170,8 +107,8 @@ async function getInitializedClient(request: BridgeRequest): Promise<DriveClient
   }
 
   const authService = new AuthService();
-  await authService.login(request.username, request.password, undefined);
-  await client.initializeFromSession();
+  await authService.login(request.username, password, undefined);
+  await client.initialize(password);
   return client;
 }
 
@@ -234,7 +171,11 @@ async function handleUploadCommand(request: BridgeRequest): Promise<void> {
 
     // Ensure prefix folder exists (first 2 chars of OID)
     const prefix = oid.substring(0, 2).toLowerCase();
-    await ensureOidFolder(client, basePath, prefix);
+    const prefixPath = await ensureOidFolder(client, basePath, prefix);
+
+    // Ensure second-level folder exists (chars 2-4 of OID)
+    const second = oid.substring(2, 4).toLowerCase();
+    await ensureOidFolder(client, prefixPath, second);
 
     // Upload file using OID-based path
     const targetPath = oidToPath(storageBase, oid);

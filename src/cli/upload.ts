@@ -17,6 +17,7 @@ import {
   getParentPath,
 } from '../utils/stdin';
 import { isVerbose, isQuiet, verboseLog, normalLog, outputResult } from '../utils/output';
+import { resolvePassword } from '../utils/password';
 
 /**
  * Create the upload command
@@ -30,6 +31,7 @@ export function createUploadCommand(): Command {
     .argument('[destination]', 'Destination path in Drive - can be a folder (/Documents) or include filename (/Documents/newname.txt)', '/')
     .option('--no-progress', 'Disable progress output')
     .option('--name <filename>', 'Filename to use when uploading from stdin')
+    .option('--password <password>', 'Password for key decryption (or set PROTON_PASSWORD)')
     .action(async (file: string, destination: string, options) => {
       const startTime = Date.now();
       let uploadCancelled = false;
@@ -141,13 +143,16 @@ export function createUploadCommand(): Command {
           }
         });
 
+        // Resolve password for key decryption
+        const password = await resolvePassword(options);
+
         // Create and initialize drive client
         let initSpinner;
         if (isVerbose()) {
           initSpinner = ora('Initializing Drive client...').start();
         }
         const client = createDriveClient();
-        await client.initializeFromSession();
+        await client.initializeFromSession(password);
         if (initSpinner) {
           initSpinner.succeed('Client initialized');
         }

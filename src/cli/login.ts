@@ -80,7 +80,7 @@ export function createLoginCommand(): Command {
             }
             // Always show password info when using --password-stdin to help with debugging
             if (!isQuiet()) {
-              console.log(chalk.dim(`[INFO] Password read from stdin: length=${password.length} characters`));
+              console.log(chalk.dim('[INFO] Password read from stdin'));
             }
           } catch (err) {
             console.error(chalk.red('Error reading password from stdin:'), err);
@@ -151,7 +151,7 @@ export function createLoginCommand(): Command {
             spinner.succeed(chalk.green('Login successful!'));
           }
           if (isVerbose()) {
-            console.log(chalk.dim('Session saved to ~/.proton-drive-cli/session.json'));
+            console.log(chalk.dim('Session saved (tokens only). Use --password with subsequent commands.'));
             console.log('\nYou can now use the CLI to upload files to Proton Drive.');
           } else if (!isQuiet()) {
             outputResult('OK');
@@ -182,7 +182,7 @@ export function createLoginCommand(): Command {
               try {
                 await authService.login(username.trim(), password);
                 retrySpinner.succeed(chalk.green('Login successful!'));
-                console.log(chalk.dim('Session saved to ~/.proton-drive-cli/session.json'));
+                console.log(chalk.dim('Session saved (tokens only). Use --password with subsequent commands.'));
                 console.log('\nYou can now use the CLI to upload files to Proton Drive.');
                 return;
               } catch (retryError: any) {
@@ -201,7 +201,7 @@ export function createLoginCommand(): Command {
             try {
               await authService.login(username.trim(), password, verificationToken);
               verifySpinner.succeed(chalk.green('Login successful!'));
-              console.log(chalk.dim('Session saved to ~/.proton-drive-cli/session.json'));
+              console.log(chalk.dim('Session saved (tokens only). Use --password with subsequent commands.'));
               console.log('\nYou can now use the CLI to upload files to Proton Drive.');
             } catch (retryError: any) {
               verifySpinner.fail();

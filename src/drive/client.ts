@@ -48,20 +48,18 @@ export class DriveClient {
   }
 
   /**
-   * Initialize from session
-   * Loads the mailbox password from the saved session
+   * Initialize from session with an externally-provided password.
+   * The password is required because it is never persisted to disk —
+   * it flows via stdin from pass-cli on every invocation.
+   * @param mailboxPassword - User's mailbox password for key decryption
    */
-  async initializeFromSession(): Promise<void> {
+  async initializeFromSession(mailboxPassword: string): Promise<void> {
     const session = await SessionManager.loadSession();
     if (!session) {
       throw new Error('No session found. Please login first.');
     }
 
-    if (!session.mailboxPassword) {
-      throw new Error('Mailbox password not found in session. Please login again.');
-    }
-
-    await this.initialize(session.mailboxPassword);
+    await this.initialize(mailboxPassword);
   }
 
   /**
