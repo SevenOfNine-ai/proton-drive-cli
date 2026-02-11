@@ -25,8 +25,9 @@
     "watch": "tsc --watch",
     "install-global": "yarn build && yarn link",
     "uninstall-global": "yarn unlink",
+    "prepack": "find node_modules/@protontech/drive-sdk/src -type f -delete 2>/dev/null; find node_modules/@protontech/drive-sdk/dist -name '*.test.*' -delete 2>/dev/null; true",
     "prepublishOnly": "yarn build",
-    "package": "yarn build && yarn pack"
+    "package": "yarn build && npm pack"
   },
   "bin": {
     "proton-drive": "./dist/index.js"
