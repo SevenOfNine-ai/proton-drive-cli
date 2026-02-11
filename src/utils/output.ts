@@ -33,15 +33,6 @@ export function normalLog(...args: any[]): void {
 }
 
 /**
- * Print error message (always shown unless quiet)
- */
-export function errorLog(...args: any[]): void {
-  if (!isQuiet()) {
-    console.error(...args);
-  }
-}
-
-/**
  * Print minimal output for scripts (always shown, even in quiet for success)
  */
 export function outputResult(data: string): void {

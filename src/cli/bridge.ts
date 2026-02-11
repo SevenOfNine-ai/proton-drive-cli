@@ -1,21 +1,27 @@
 /**
  * Bridge command for Git LFS integration
  * Reads JSON from stdin, performs operations, writes JSON to stdout
- * Compatible with .NET bridge protocol envelope format:
+ * Uses bridge protocol envelope format:
  *   { ok: true/false, payload: {...}, error: "...", code: 400-500 }
+ *
+ * Uses ProtonDriveClient (official SDK) for all Drive operations.
  */
 
 import { Command } from 'commander';
 import * as readline from 'readline';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { createDriveClient, DriveClient } from '../drive/client';
+import { Readable, Writable } from 'stream';
+import type { ProtonDriveClient } from '@protontech/drive-sdk';
+import { createSDKClient } from '../sdk/client';
+import { ensureFolderPath } from '../sdk/pathResolver';
 import { AuthService } from '../auth';
 import { ErrorCode } from '../errors/types';
 import { logger, LogLevel } from '../utils/logger';
 import {
   ensureOidFolder,
   findFileByOid,
+  deleteByOid,
   listFolder,
 } from './bridge-helpers';
 import {
@@ -26,6 +32,7 @@ import {
   errorToStatusCode,
   oidToPath,
 } from '../bridge/validators';
+import { gitCredentialFill } from '../utils/git-credential';
 
 /**
  * Write JSON response to stdout (single line, no extra output)
@@ -43,22 +50,36 @@ function writeError(message: string, code: number = 500, details: string = ''): 
 }
 
 /**
- * Read JSON payload from stdin
+ * Read JSON payload from stdin.
+ * Timeout prevents hanging indefinitely if the calling process never closes stdin.
  */
+const STDIN_TIMEOUT_MS = 30_000;
+
 async function readStdinJson(): Promise<BridgeRequest> {
   return new Promise((resolve, reject) => {
     let input = '';
+    let settled = false;
 
     const rl = readline.createInterface({
       input: process.stdin,
       terminal: false,
     });
 
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      rl.close();
+      reject(new Error(`Timed out waiting for stdin input (${STDIN_TIMEOUT_MS}ms)`));
+    }, STDIN_TIMEOUT_MS);
+
     rl.on('line', (line) => {
       input += line;
     });
 
     rl.on('close', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       try {
         if (!input.trim()) {
           reject(new Error('Empty input received'));
@@ -71,6 +92,9 @@ async function readStdinJson(): Promise<BridgeRequest> {
     });
 
     rl.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       reject(error);
     });
   });
@@ -80,70 +104,63 @@ async function readStdinJson(): Promise<BridgeRequest> {
 export { BridgeRequest, BridgeResponse, validateOid, validateLocalPath, errorToStatusCode } from '../bridge/validators';
 
 /**
- * Initialize DriveClient, authenticating if necessary.
- * Password is always required — it flows via stdin from pass-cli
- * and is never read from the session file.
+ * Resolve credentials from request, falling back to git-credential
+ * when credentialProvider === 'git-credential'.
  */
-async function getInitializedClient(request: BridgeRequest): Promise<DriveClient> {
-  const client = createDriveClient();
-  const password = request.password;
-
-  // Try existing session tokens + stdin password for crypto
-  try {
-    if (password) {
-      await client.initializeFromSession(password);
-      return client;
-    }
-  } catch (_) {
-    // No valid session — need full login
+async function resolveRequestCredentials(request: BridgeRequest): Promise<{ username?: string; password?: string }> {
+  if (request.username && request.password) {
+    return { username: request.username, password: request.password };
   }
+  if (request.password) {
+    return { password: request.password };
+  }
+  if (request.credentialProvider === 'git-credential') {
+    const cred = await gitCredentialFill();
+    return { username: cred.username, password: cred.password };
+  }
+  return {};
+}
 
-  // Need full login
-  if (!request.username || !password) {
+/**
+ * Initialize ProtonDriveClient (SDK), authenticating if necessary.
+ * Password is always required — it flows via stdin from pass-cli,
+ * or is resolved via git-credential when credentialProvider is set.
+ */
+async function getInitializedClient(request: BridgeRequest): Promise<ProtonDriveClient> {
+  const resolved = await resolveRequestCredentials(request);
+  const password = resolved.password;
+
+  if (!password) {
     throw Object.assign(
       new Error('No session found and credentials not provided'),
       { code: ErrorCode.AUTH_FAILED }
     );
   }
 
-  const authService = new AuthService();
-  await authService.login(request.username, password, undefined);
-  await client.initialize(password);
-  return client;
+  return createSDKClient(password, resolved.username);
 }
 
 /**
  * Ensure the LFS base directory exists
  */
-async function ensureBaseDir(client: DriveClient, storageBase: string): Promise<string> {
+async function ensureBaseDir(client: ProtonDriveClient, storageBase: string): Promise<string> {
   const normalizedBase = storageBase.replace(/^\/+|\/+$/g, '');
-  const basePath = `/${normalizedBase}`;
-
-  try {
-    await client.paths().resolvePath(basePath);
-  } catch (error: any) {
-    if (error?.message?.includes('not found') || error?.message?.includes('Not found')) {
-      logger.debug(`Creating base directory: ${basePath}`);
-      await client.createFolder('/', normalizedBase);
-    } else {
-      throw error;
-    }
-  }
-
-  return basePath;
+  await ensureFolderPath(client, `/${normalizedBase}`);
+  return `/${normalizedBase}`;
 }
 
 // ─── Command handlers ──────────────────────────────────────────────
 
 async function handleAuthCommand(request: BridgeRequest): Promise<void> {
-  if (!request.username || !request.password) {
-    writeError('username and password are required', 400);
-    return;
-  }
-
   try {
+    const resolved = await resolveRequestCredentials(request);
+    if (!resolved.username || !resolved.password) {
+      writeError('username and password are required', 400);
+      return;
+    }
+
     const authService = new AuthService();
-    await authService.login(request.username, request.password, undefined);
+    await authService.login(resolved.username, resolved.password, undefined);
     writeSuccess({ authenticated: true });
   } catch (error: any) {
     writeError(
@@ -167,27 +184,39 @@ async function handleUploadCommand(request: BridgeRequest): Promise<void> {
     await fs.access(filePath);
 
     const client = await getInitializedClient(request);
-    const basePath = await ensureBaseDir(client, storageBase);
+    await ensureBaseDir(client, storageBase);
 
     // Ensure prefix folder exists (first 2 chars of OID)
     const prefix = oid.substring(0, 2).toLowerCase();
-    const prefixPath = await ensureOidFolder(client, basePath, prefix);
+    await ensureOidFolder(client, `/${storageBase}`, prefix);
 
     // Ensure second-level folder exists (chars 2-4 of OID)
     const second = oid.substring(2, 4).toLowerCase();
-    await ensureOidFolder(client, prefixPath, second);
+    await ensureOidFolder(client, `/${storageBase}/${prefix}`, second);
 
     // Upload file using OID-based path
     const targetPath = oidToPath(storageBase, oid);
     const fileName = path.basename(targetPath);
     const parentPath = path.dirname(targetPath);
 
-    const result = await client.uploadFile(filePath, parentPath, undefined, fileName);
+    // Resolve parent folder to UID, then upload via SDK
+    const parentUid = await ensureFolderPath(client, parentPath);
+    const stat = await fs.stat(filePath);
+
+    const fileStream = require('fs').createReadStream(filePath);
+    const webStream = Readable.toWeb(fileStream) as ReadableStream;
+
+    const uploader = await client.getFileUploader(parentUid, fileName, {
+      mediaType: 'application/octet-stream',
+      expectedSize: stat.size,
+    });
+    const ctrl = await uploader.uploadFromStream(webStream, []);
+    const { nodeUid } = await ctrl.completion();
 
     writeSuccess({
       oid,
-      fileId: result.fileId,
-      revisionId: result.revisionId,
+      fileId: nodeUid,
+      revisionId: '', // SDK doesn't expose revision ID in the same way
       uploaded: true,
     });
   } catch (error: any) {
@@ -212,18 +241,26 @@ async function handleDownloadCommand(request: BridgeRequest): Promise<void> {
 
     const client = await getInitializedClient(request);
 
-    const sourcePath = await findFileByOid(client, storageBase, oid);
-    if (!sourcePath) {
+    const nodeUid = await findFileByOid(client, storageBase, oid);
+    if (!nodeUid) {
       writeError(`File not found for OID: ${oid}`, 404);
       return;
     }
 
-    const result = await client.downloadFile(sourcePath, outputPath);
+    // Download via SDK
+    const downloader = await client.getFileDownloader(nodeUid);
+    const fileStream = require('fs').createWriteStream(outputPath);
+    const webStream = Writable.toWeb(fileStream) as WritableStream;
+
+    const ctrl = downloader.downloadToStream(webStream);
+    await ctrl.completion();
+
+    const stat = await fs.stat(outputPath);
 
     writeSuccess({
       oid,
-      outputPath: result.filePath,
-      size: result.size,
+      outputPath,
+      size: stat.size,
       downloaded: true,
     });
   } catch (error: any) {
@@ -259,6 +296,145 @@ async function handleListCommand(request: BridgeRequest): Promise<void> {
   }
 }
 
+async function handleExistsCommand(request: BridgeRequest): Promise<void> {
+  const { oid, storageBase = 'LFS' } = request;
+
+  if (!oid) {
+    writeError('oid is required for exists', 400);
+    return;
+  }
+
+  try {
+    validateOid(oid);
+
+    const client = await getInitializedClient(request);
+    const nodeUid = await findFileByOid(client, storageBase, oid);
+
+    writeSuccess({ oid, exists: !!nodeUid });
+  } catch (error: any) {
+    writeError(
+      error.message || 'Exists check failed',
+      errorToStatusCode(error)
+    );
+  }
+}
+
+async function handleDeleteCommand(request: BridgeRequest): Promise<void> {
+  const { oid, storageBase = 'LFS' } = request;
+
+  if (!oid) {
+    writeError('oid is required for delete', 400);
+    return;
+  }
+
+  try {
+    validateOid(oid);
+
+    const client = await getInitializedClient(request);
+    const deleted = await deleteByOid(client, storageBase, oid);
+
+    if (!deleted) {
+      writeError(`File not found for OID: ${oid}`, 404);
+      return;
+    }
+
+    writeSuccess({ oid, deleted: true });
+  } catch (error: any) {
+    writeError(
+      error.message || 'Delete failed',
+      errorToStatusCode(error)
+    );
+  }
+}
+
+async function handleRefreshCommand(request: BridgeRequest): Promise<void> {
+  try {
+    const authService = new AuthService();
+    const session = await authService.refreshSession();
+    writeSuccess({ refreshed: true, uid: session.uid });
+  } catch (error: any) {
+    writeError(
+      error.message || 'Session refresh failed',
+      errorToStatusCode(error)
+    );
+  }
+}
+
+async function handleInitCommand(request: BridgeRequest): Promise<void> {
+  const { storageBase = 'LFS' } = request;
+
+  try {
+    const client = await getInitializedClient(request);
+    const basePath = await ensureBaseDir(client, storageBase);
+
+    writeSuccess({ storageBase, path: basePath, initialized: true });
+  } catch (error: any) {
+    writeError(
+      error.message || 'Init failed',
+      errorToStatusCode(error)
+    );
+  }
+}
+
+async function handleBatchExistsCommand(request: BridgeRequest): Promise<void> {
+  const { oids, storageBase = 'LFS' } = request;
+
+  if (!oids || !Array.isArray(oids) || oids.length === 0) {
+    writeError('oids array is required for batch-exists', 400);
+    return;
+  }
+
+  try {
+    for (const oid of oids) {
+      validateOid(oid);
+    }
+
+    const client = await getInitializedClient(request);
+    const results: Record<string, boolean> = {};
+
+    for (const oid of oids) {
+      const nodeUid = await findFileByOid(client, storageBase, oid);
+      results[oid] = !!nodeUid;
+    }
+
+    writeSuccess({ results });
+  } catch (error: any) {
+    writeError(
+      error.message || 'Batch exists failed',
+      errorToStatusCode(error)
+    );
+  }
+}
+
+async function handleBatchDeleteCommand(request: BridgeRequest): Promise<void> {
+  const { oids, storageBase = 'LFS' } = request;
+
+  if (!oids || !Array.isArray(oids) || oids.length === 0) {
+    writeError('oids array is required for batch-delete', 400);
+    return;
+  }
+
+  try {
+    for (const oid of oids) {
+      validateOid(oid);
+    }
+
+    const client = await getInitializedClient(request);
+    const results: Record<string, boolean> = {};
+
+    for (const oid of oids) {
+      results[oid] = await deleteByOid(client, storageBase, oid);
+    }
+
+    writeSuccess({ results });
+  } catch (error: any) {
+    writeError(
+      error.message || 'Batch delete failed',
+      errorToStatusCode(error)
+    );
+  }
+}
+
 // ─── Command registration ──────────────────────────────────────────
 
 export function createBridgeCommand(): Command {
@@ -268,7 +444,7 @@ export function createBridgeCommand(): Command {
     .description(
       'Bridge mode for Git LFS integration — reads JSON from stdin, writes JSON to stdout'
     )
-    .argument('<command>', 'Bridge command: auth, upload, download, list')
+    .argument('<command>', 'Bridge command: auth, upload, download, list, exists, delete, refresh, init, batch-exists, batch-delete')
     .action(async (command: string) => {
       // Suppress all non-JSON output
       logger.setLevel(LogLevel.ERROR);
@@ -288,6 +464,24 @@ export function createBridgeCommand(): Command {
             break;
           case 'list':
             await handleListCommand(request);
+            break;
+          case 'exists':
+            await handleExistsCommand(request);
+            break;
+          case 'delete':
+            await handleDeleteCommand(request);
+            break;
+          case 'refresh':
+            await handleRefreshCommand(request);
+            break;
+          case 'init':
+            await handleInitCommand(request);
+            break;
+          case 'batch-exists':
+            await handleBatchExistsCommand(request);
+            break;
+          case 'batch-delete':
+            await handleBatchDeleteCommand(request);
             break;
           default:
             writeError(`Unknown bridge command: ${command}`, 400);

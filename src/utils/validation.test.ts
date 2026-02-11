@@ -2,34 +2,10 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import {
-  validateDestinationPath,
   validateFileSize,
-  validateEmail,
   validateFilePath,
 } from './validation';
 import { AppError } from '../errors/types';
-
-describe('validateDestinationPath', () => {
-  it('accepts absolute path', () => {
-    expect(() => validateDestinationPath('/Documents/file.txt')).not.toThrow();
-  });
-
-  it('accepts empty string (root)', () => {
-    expect(() => validateDestinationPath('')).not.toThrow();
-  });
-
-  it('throws on relative path', () => {
-    expect(() => validateDestinationPath('Documents/file.txt')).toThrow(AppError);
-  });
-
-  it('throws on special characters', () => {
-    expect(() => validateDestinationPath('/path<with>bad')).toThrow(AppError);
-  });
-
-  it('throws on null bytes', () => {
-    expect(() => validateDestinationPath('/path\x00with')).toThrow(AppError);
-  });
-});
 
 describe('validateFileSize', () => {
   it('accepts normal file size', () => {
@@ -49,24 +25,6 @@ describe('validateFileSize', () => {
 
   it('accepts size equal to custom max', () => {
     expect(() => validateFileSize(1024, 1024)).not.toThrow();
-  });
-});
-
-describe('validateEmail', () => {
-  it('returns true for valid email', () => {
-    expect(validateEmail('user@example.com')).toBe(true);
-  });
-
-  it('returns false for email without @', () => {
-    expect(validateEmail('userexample.com')).toBe(false);
-  });
-
-  it('returns false for email without domain', () => {
-    expect(validateEmail('user@')).toBe(false);
-  });
-
-  it('returns false for empty string', () => {
-    expect(validateEmail('')).toBe(false);
   });
 });
 

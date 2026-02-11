@@ -1,6 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { homedir } from 'os';
+import { randomBytes } from 'crypto';
 import { SessionCredentials } from '../types/auth';
 import { logger } from '../utils/logger';
 
@@ -19,17 +20,25 @@ export class SessionManager {
    */
   static async saveSession(session: SessionCredentials): Promise<void> {
     try {
-      // Ensure directory exists
-      await fs.ensureDir(SESSION_DIR);
+      // Ensure directory exists with owner-only permissions
+      await fs.ensureDir(SESSION_DIR, { mode: 0o700 });
 
       // Strip mailboxPassword — passwords are never persisted to disk.
       // The password flows via stdin on every bridge invocation (from pass-cli).
       const { mailboxPassword, ...safeSession } = session as any;
 
-      // Write atomically: temp file with restrictive mode, then rename
-      const tmpFile = SESSION_FILE + '.tmp';
-      await fs.writeJson(tmpFile, safeSession, { spaces: 2, mode: 0o600 });
-      await fs.move(tmpFile, SESSION_FILE, { overwrite: true });
+      // Write atomically: unique temp file with restrictive mode, then rename.
+      // Unique suffix prevents corruption from concurrent saveSession calls.
+      const suffix = `${process.pid}-${randomBytes(4).toString('hex')}`;
+      const tmpFile = `${SESSION_FILE}.tmp-${suffix}`;
+      try {
+        await fs.writeJson(tmpFile, safeSession, { spaces: 2, mode: 0o600 });
+        await fs.move(tmpFile, SESSION_FILE, { overwrite: true });
+      } catch (writeErr) {
+        // Clean up temp file on error to avoid leaking session data
+        await fs.remove(tmpFile).catch(() => {});
+        throw writeErr;
+      }
     } catch (error) {
       throw new Error(`Failed to save session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

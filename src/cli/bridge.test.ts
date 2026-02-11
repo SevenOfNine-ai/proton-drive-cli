@@ -1,4 +1,5 @@
 import { validateOid, validateLocalPath, errorToStatusCode } from './bridge';
+import { BridgeRequest } from '../bridge/validators';
 import { ErrorCode } from '../errors/types';
 
 describe('validateOid', () => {
@@ -118,5 +119,32 @@ describe('errorToStatusCode', () => {
   it('returns 500 for null/undefined error', () => {
     expect(errorToStatusCode(null)).toBe(500);
     expect(errorToStatusCode(undefined)).toBe(500);
+  });
+});
+
+describe('BridgeRequest credentialProvider field', () => {
+  it('accepts credentialProvider in the request type', () => {
+    const request: BridgeRequest = {
+      credentialProvider: 'git-credential',
+    };
+    expect(request.credentialProvider).toBe('git-credential');
+  });
+
+  it('is optional (backward compatible)', () => {
+    const request: BridgeRequest = {
+      username: 'user@proton.me',
+      password: 'secret',
+    };
+    expect(request.credentialProvider).toBeUndefined();
+  });
+
+  it('can coexist with username/password', () => {
+    const request: BridgeRequest = {
+      username: 'user@proton.me',
+      password: 'secret',
+      credentialProvider: 'git-credential',
+    };
+    expect(request.username).toBe('user@proton.me');
+    expect(request.credentialProvider).toBe('git-credential');
   });
 });

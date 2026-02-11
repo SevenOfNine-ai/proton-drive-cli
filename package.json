@@ -81,23 +81,19 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1",
+    "@protontech/drive-sdk": "file:./submodules/sdk/js/sdk",
     "@protontech/openpgp": "^6.2.2",
-    "@protontech/pmcrypto": "^8.8.1",
+    "openpgp": "npm:@protontech/openpgp@^6.2.2",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "boxen": "^7.1.1",
     "chalk": "^5.6.2",
-    "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.2",
-    "dotenv": "^17.2.3",
     "fs-extra": "^11.3.2",
     "inquirer": "^8.2.7",
     "jwt-decode": "^4.0.0",
     "mime-types": "^3.0.2",
-    "ora": "^9.0.0",
-    "p-limit": "^7.2.0",
-    "p-retry": "^7.1.0"
+    "ora": "^9.0.0"
   }
 }

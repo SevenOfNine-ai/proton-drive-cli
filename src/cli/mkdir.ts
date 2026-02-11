@@ -1,6 +1,9 @@
 import { Command } from 'commander';
-import { createDriveClient } from '../drive/client';
 import chalk from 'chalk';
+import { createSDKClient } from '../sdk/client';
+import { ensureFolderPath } from '../sdk/pathResolver';
+import { handleError } from '../errors/handler';
+import { isVerbose, isQuiet, outputResult } from '../utils/output';
 import { resolvePassword } from '../utils/password';
 
 /**
@@ -14,35 +17,36 @@ export function createMkdirCommand(): Command {
     .description('Create a new folder in Proton Drive')
     .argument('<path>', 'Path where to create the folder (e.g., /Documents)')
     .argument('<folder-name>', 'Name of the folder to create')
-    .option('-p, --parents', 'Create parent directories as needed (not implemented yet)')
-    .option('--password <password>', 'Password for key decryption (or set PROTON_PASSWORD)')
+    .option('--password-stdin', 'Read password for key decryption from stdin')
+    .option('--credential-provider <type>', 'Credential provider: git (use git credential manager)')
     .action(async (path: string, folderName: string, options) => {
       try {
-        if (options.parents) {
-          console.log(chalk.yellow('Warning: -p/--parents option is not yet implemented'));
-        }
-
         // Resolve password for key decryption
         const password = await resolvePassword(options);
 
-        // Initialize Drive client
-        const client = createDriveClient();
-        await client.initializeFromSession(password);
+        // Initialize SDK client
+        const client = await createSDKClient(password);
 
-        console.log(chalk.cyan(`Creating folder "${folderName}" at ${path}...`));
-
-        // Create the folder
-        const folderId = await client.createFolder(path, folderName);
-
-        console.log(chalk.green('✓ Folder created successfully'));
-        console.log(chalk.gray(`  Folder ID: ${folderId}`));
-        console.log(chalk.gray(`  Full path: ${path}/${folderName}`));
-      } catch (error) {
-        if (error instanceof Error) {
-          console.error(chalk.red('Error:'), error.message);
-        } else {
-          console.error(chalk.red('Error:'), String(error));
+        if (isVerbose()) {
+          console.log(chalk.cyan(`Creating folder "${folderName}" at ${path}...`));
         }
+
+        // Create the folder using SDK
+        const parentUid = await ensureFolderPath(client, path);
+        const result = await client.createFolder(parentUid, folderName);
+        if (!result.ok) {
+          throw new Error(`Failed to create folder: ${JSON.stringify(result.error)}`);
+        }
+
+        if (isVerbose()) {
+          console.log(chalk.green('✓ Folder created successfully'));
+          console.log(chalk.gray(`  Folder UID: ${result.value.uid}`));
+          console.log(chalk.gray(`  Full path: ${path}/${folderName}`));
+        } else if (!isQuiet()) {
+          outputResult(result.value.uid);
+        }
+      } catch (error) {
+        handleError(error, process.env.DEBUG === 'true');
         process.exit(1);
       }
     });

@@ -153,7 +153,9 @@ export const generateProofs = async ({
   const modulusMinusOne = modulus - BigInt(1);
   const multiplierReduced = mod(multiplier, modulus);
 
-  if (serverEphemeral === BigInt(0)) {
+  // SRP-6a: "The user will abort if he receives B == 0 (mod N)"
+  // A malicious server could send B = N, B = 2N, etc. to force a degenerate shared secret.
+  if (mod(serverEphemeral, modulus) === BigInt(0)) {
     throw new Error('SRP server ephemeral is out of bounds');
   }
 

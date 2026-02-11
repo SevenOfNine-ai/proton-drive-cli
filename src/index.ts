@@ -7,6 +7,11 @@ import { createUploadCommand } from './cli/upload';
 import { createDownloadCommand } from './cli/download';
 import { createMkdirCommand } from './cli/mkdir';
 import { createBridgeCommand } from './cli/bridge';
+import { createCredentialCommand } from './cli/credential';
+import { createRmCommand } from './cli/rm';
+import { createMvCommand } from './cli/mv';
+import { createCatCommand } from './cli/cat';
+import { createInfoCommand } from './cli/info';
 import { setupShutdownHandlers } from './utils/shutdown';
 import { handleError } from './errors/handler';
 import { logger, LogLevel } from './utils/logger';
@@ -79,8 +84,17 @@ program.addCommand(createUploadCommand());
 program.addCommand(createDownloadCommand());
 program.addCommand(createMkdirCommand());
 
+// Add file management commands
+program.addCommand(createRmCommand());
+program.addCommand(createMvCommand());
+program.addCommand(createCatCommand());
+program.addCommand(createInfoCommand());
+
 // Add bridge command (for Git LFS integration)
 program.addCommand(createBridgeCommand());
+
+// Add credential management command
+program.addCommand(createCredentialCommand());
 
 // Custom help
 program.on('--help', () => {
@@ -90,7 +104,11 @@ program.on('--help', () => {
   console.log('  $ proton-drive upload ./file.pdf /Documents');
   console.log('  $ proton-drive ls /Documents');
   console.log('  $ proton-drive download /Documents/file.pdf ./downloads/');
-  console.log('  $ proton-drive mkdir /NewFolder');
+  console.log('  $ proton-drive mkdir /Documents NewFolder');
+  console.log('  $ proton-drive rm /Documents/old-file.pdf');
+  console.log('  $ proton-drive mv /Documents/file.pdf /Archive/file.pdf');
+  console.log('  $ proton-drive cat /Documents/notes.txt');
+  console.log('  $ proton-drive info /Documents/file.pdf');
   console.log('');
   console.log(chalk.dim('For more information on a specific command:'));
   console.log('  $ proton-drive <command> --help');

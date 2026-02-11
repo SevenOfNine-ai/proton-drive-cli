@@ -61,9 +61,3 @@ export function isShuttingDownFlag(): boolean {
   return isShuttingDown;
 }
 
-/**
- * Clear all shutdown handlers (useful for testing)
- */
-export function clearShutdownHandlers(): void {
-  cleanupHandlers.length = 0;
-}

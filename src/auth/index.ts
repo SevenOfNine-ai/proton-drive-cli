@@ -3,6 +3,7 @@ import { SRPClient } from './srp';
 import { SessionManager } from './session';
 import { SessionCredentials } from '../types/auth';
 import { jwtDecode } from 'jwt-decode';
+import { logger } from '../utils/logger';
 
 /**
  * Main authentication service
@@ -67,8 +68,8 @@ export class AuthService {
 
       // Step 6: Save session
       await SessionManager.saveSession(session);
-      console.log('✓ Authentication successful');
-      console.log(`Session saved (tokens only) to: ${SessionManager.getSessionFilePath()}`);
+      logger.info('Authentication successful');
+      logger.debug(`Session saved (tokens only) to: ${SessionManager.getSessionFilePath()}`);
 
       return session;
     } catch (error: any) {
@@ -147,7 +148,7 @@ export class AuthService {
       };
 
       await SessionManager.saveSession(updatedSession);
-      console.log('✓ Access token refreshed');
+      logger.info('Access token refreshed');
 
       return updatedSession;
     } catch (error) {
@@ -170,13 +171,13 @@ export class AuthService {
           await this.authApi.logout(session.accessToken);
         } catch (error) {
           // Ignore errors from server (session might be already invalid)
-          console.warn('Could not revoke session on server (this is normal if token is expired)');
+          logger.warn('Could not revoke session on server (this is normal if token is expired)');
         }
       }
 
       // Clear local session
       await SessionManager.clearSession();
-      console.log('✓ Logged out successfully');
+      logger.info('Logged out successfully');
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Logout failed: ${error.message}`);

@@ -26,6 +26,10 @@ export interface BridgeRequest {
   outputPath?: string;
   folder?: string;
   storageBase?: string;
+  /** When set to 'git-credential', the bridge resolves credentials itself via git credential fill */
+  credentialProvider?: string;
+  /** Array of OIDs for batch operations (batch-exists, batch-delete) */
+  oids?: string[];
 }
 
 /**
@@ -64,6 +68,9 @@ export function validateOid(oid: string): void {
 export function validateLocalPath(filePath: string): void {
   if (!filePath || typeof filePath !== 'string') {
     throw new Error('File path is required');
+  }
+  if (filePath.indexOf('\0') !== -1) {
+    throw new Error('Null bytes not allowed in path');
   }
   if (filePath.split(/[/\\]/).includes('..')) {
     throw new Error('Path traversal not allowed');

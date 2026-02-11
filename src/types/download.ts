@@ -42,6 +42,8 @@ export interface DownloadResult {
   size: number;
   /** Number of blocks downloaded */
   downloadedBlocks: number;
+  /** Whether manifest signature was verified (false if signer unknown or verification skipped) */
+  verified: boolean;
 }
 
 /**

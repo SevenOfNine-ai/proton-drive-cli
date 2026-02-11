@@ -1,17 +1,21 @@
 /**
  * Helper functions for Git LFS bridge operations
  * Handles OID-based path mapping and folder structure for Git LFS objects
+ *
+ * Uses ProtonDriveClient (official SDK) for all Drive operations.
  */
 
-import { DriveClient } from '../drive/client';
+import type { ProtonDriveClient } from '@protontech/drive-sdk';
+import { NodeType } from '@protontech/drive-sdk';
 import { logger } from '../utils/logger';
+import { resolvePathToNodeUid, ensureFolderPath, findFileInFolder } from '../sdk/pathResolver';
 
 // Re-export canonical oidToPath/pathToOid from bridge/validators (no heavy deps)
 export { oidToPath, pathToOid } from '../bridge/validators';
 import { oidToPath } from '../bridge/validators';
 
 /**
- * Listing result item (simplified from DriveClient internals)
+ * Listing result item
  */
 export interface ListItem {
   name: string;
@@ -24,85 +28,54 @@ export interface ListItem {
  * Ensure OID prefix folder exists in Proton Drive
  * Creates the 2-character prefix directory if it doesn't exist
  *
- * @param client - Initialized DriveClient
+ * @param client - Initialized ProtonDriveClient
  * @param parentPath - Parent directory path (e.g., "/LFS")
  * @param prefix - 2-character prefix (e.g., "ab")
- * @returns Path to prefix folder
+ * @returns UID of the prefix folder
  */
 export async function ensureOidFolder(
-  client: DriveClient,
+  client: ProtonDriveClient,
   parentPath: string,
-  prefix: string
+  prefix: string,
 ): Promise<string> {
   if (prefix.length !== 2) {
     throw new Error(`Invalid prefix: must be 2 characters, got: ${prefix}`);
   }
 
-  const prefixPath = `${parentPath}/${prefix}`;
-
-  try {
-    // Check if prefix folder exists by trying to resolve it
-    await client.paths().resolvePath(prefixPath);
-    logger.debug(`Prefix folder already exists: ${prefixPath}`);
-    return prefixPath;
-  } catch (error: any) {
-    // Folder doesn't exist, need to create it
-    if (error?.message?.includes('not found') || error?.message?.includes('Not found')) {
-      logger.debug(`Creating prefix folder: ${prefixPath}`);
-      await client.createFolder(parentPath, prefix);
-      return prefixPath;
-    }
-    throw error;
-  }
+  const folderPath = `${parentPath}/${prefix}`;
+  return ensureFolderPath(client, folderPath);
 }
 
 /**
  * Find file by OID in Proton Drive
- * Resolves OID to full Drive path and checks if file exists
+ * Resolves OID to the folder path and searches for the file by name
  *
- * @param client - Initialized DriveClient
+ * @param client - Initialized ProtonDriveClient
  * @param storageBase - Base directory (e.g., "LFS")
  * @param oid - Git LFS object ID
- * @returns Full path if file exists, null if not found
+ * @returns Node UID if file exists, null if not found
  */
 export async function findFileByOid(
-  client: DriveClient,
+  client: ProtonDriveClient,
   storageBase: string,
-  oid: string
+  oid: string,
 ): Promise<string | null> {
   const fullPath = oidToPath(storageBase, oid);
-
-  // Resolve the parent folder (prefix directory) and look for the file
   const pathParts = fullPath.split('/').filter((p) => p.length > 0);
-  const fileName = pathParts[pathParts.length - 1]; // remaining OID chars
-  const folderPath = '/' + pathParts.slice(0, -1).join('/'); // /base/prefix
+  const fileName = pathParts[pathParts.length - 1]; // The OID filename
+  const folderPath = '/' + pathParts.slice(0, -1).join('/'); // /base/prefix/second
 
   try {
-    const resolved = await client.paths().resolvePath(folderPath);
-
-    // List children and find the file by decrypted name
-    const links = await client.nodes().listFolderChildrenLinks(
-      resolved.identity.shareId,
-      resolved.identity.linkId
-    );
-
-    for (const link of links) {
-      try {
-        const decryptedName = await client.nodes().decryptNodeName(link, resolved.folderContext);
-        if (decryptedName === fileName && link.Type === 2) {
-          logger.debug(`Found file by OID: ${fullPath}`);
-          return fullPath;
-        }
-      } catch (error) {
-        // Skip items that can't be decrypted
-        continue;
-      }
+    const folderUid = await resolvePathToNodeUid(client, folderPath);
+    const fileUid = await findFileInFolder(client, folderUid, fileName);
+    if (fileUid) {
+      logger.debug(`Found file by OID: ${fullPath}`);
+    } else {
+      logger.debug(`File not found by OID: ${fullPath}`);
     }
-
-    logger.debug(`File not found by OID: ${fullPath}`);
-    return null;
+    return fileUid;
   } catch (error: any) {
-    if (error?.message?.includes('not found') || error?.message?.includes('Not found')) {
+    if (error?.message?.includes('Not found')) {
       logger.debug(`Prefix folder not found for OID: ${fullPath}`);
       return null;
     }
@@ -111,58 +84,89 @@ export async function findFileByOid(
 }
 
 /**
- * List folder contents using DriveClient internals
+ * List folder contents using ProtonDriveClient
  *
- * @param client - Initialized DriveClient
+ * @param client - Initialized ProtonDriveClient
  * @param folderPath - Path to list (e.g., "/LFS")
  * @returns Array of ListItem
  */
 export async function listFolder(
-  client: DriveClient,
-  folderPath: string
+  client: ProtonDriveClient,
+  folderPath: string,
 ): Promise<ListItem[]> {
-  const resolved = await client.paths().resolvePath(folderPath);
-  const links = await client.nodes().listFolderChildrenLinks(
-    resolved.identity.shareId,
-    resolved.identity.linkId
-  );
-
+  const folderUid = await resolvePathToNodeUid(client, folderPath);
   const items: ListItem[] = [];
-  for (const link of links) {
-    try {
-      const decryptedName = await client.nodes().decryptNodeName(link, resolved.folderContext);
+
+  for await (const child of client.iterateFolderChildren(folderUid)) {
+    if (child.ok) {
       items.push({
-        name: decryptedName,
-        type: link.Type === 1 ? 'folder' : 'file',
-        size: link.Size || 0,
-        modifiedTime: link.ModifyTime || 0,
+        name: child.value.name,
+        type: child.value.type === NodeType.File ? 'file' : 'folder',
+        size: child.value.totalStorageSize || 0,
+        modifiedTime: child.value.modificationTime
+          ? Math.floor(child.value.modificationTime.getTime() / 1000)
+          : 0,
       });
-    } catch (error) {
-      // Skip items that can't be decrypted
-      continue;
     }
+    // Skip degraded nodes silently (equivalent to old catch-continue)
   }
 
   return items;
 }
 
 /**
+ * Delete a file by OID from Proton Drive.
+ * Trashes the node first, then permanently deletes it.
+ *
+ * @param client - Initialized ProtonDriveClient
+ * @param storageBase - Base directory (e.g., "LFS")
+ * @param oid - Git LFS object ID
+ * @returns true if deleted, false if not found
+ */
+export async function deleteByOid(
+  client: ProtonDriveClient,
+  storageBase: string,
+  oid: string,
+): Promise<boolean> {
+  const nodeUid = await findFileByOid(client, storageBase, oid);
+  if (!nodeUid) {
+    return false;
+  }
+
+  // Trash first (required before permanent delete)
+  for await (const result of client.trashNodes([nodeUid])) {
+    if (!result.ok) {
+      throw new Error(`Failed to trash OID ${oid}: ${JSON.stringify(result.error)}`);
+    }
+  }
+
+  // Permanently delete
+  for await (const result of client.deleteNodes([nodeUid])) {
+    if (!result.ok) {
+      throw new Error(`Failed to delete OID ${oid}: ${JSON.stringify(result.error)}`);
+    }
+  }
+
+  logger.debug(`Deleted file by OID: ${oid}`);
+  return true;
+}
+
+/**
  * List all OIDs in a specific prefix folder or all prefix folders
  *
- * @param client - Initialized DriveClient
+ * @param client - Initialized ProtonDriveClient
  * @param storageBase - Base directory (e.g., "LFS")
  * @param prefix - 2-character prefix (e.g., "ab") or null for all
  * @returns Array of OIDs
  */
 export async function listOids(
-  client: DriveClient,
+  client: ProtonDriveClient,
   storageBase: string,
-  prefix: string | null = null
+  prefix: string | null = null,
 ): Promise<string[]> {
   const normalizedBase = storageBase.replace(/^\/+|\/+$/g, '');
   const basePath = `/${normalizedBase}`;
 
-  // If prefix specified, list just that prefix folder's second-level subfolders
   if (prefix) {
     if (prefix.length !== 2) {
       throw new Error(`Invalid prefix: must be 2 characters, got: ${prefix}`);
@@ -186,7 +190,7 @@ export async function listOids(
       }
       return oids;
     } catch (error: any) {
-      if (error?.message?.includes('not found') || error?.message?.includes('Not found')) {
+      if (error?.message?.includes('Not found') || error?.message?.includes('not found')) {
         return [];
       }
       throw error;
@@ -222,7 +226,7 @@ export async function listOids(
       }
     }
   } catch (error: any) {
-    if (error?.message?.includes('not found') || error?.message?.includes('Not found')) {
+    if (error?.message?.includes('Not found') || error?.message?.includes('not found')) {
       return [];
     }
     throw error;

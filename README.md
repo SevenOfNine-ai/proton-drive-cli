@@ -2,21 +2,21 @@
 
 A command-line interface for Proton Drive.
 
-**WARNING: This is an attempt to get a usable proton drive client to work on Linux.
+**WARNING: This is an attempt to get a usable Proton Drive client to work on Linux.
 I've limited time so the majority of the code (and this README) is vibe coded as this is a side side project.
 It shouldn't be used for anything critical, nor without reviewing and understanding the code first.
 I'm mostly using it to perform periodic backups.**
 
 
-## What Works 
+## What Works
 
-- File listing/upload/download 
-- Directory creation 
+- File listing/upload/download
+- Directory creation
 
-## What Could Work Better 
+## What Could Work Better
 
- - if a CAPTCHA is required it must be solved in the browser and the token manually copied back, more details are provided when logging in
- - session persistence is not working properly, this means you need to login frequently which is quite inconvenient
+ - If a CAPTCHA is required it must be solved in the browser and the token manually copied back; more details are provided when logging in
+ - Session persistence is not working properly; this means you need to login frequently which is quite inconvenient
 
 **PRs to fix the above are welcome**
 
@@ -24,15 +24,16 @@ I'm mostly using it to perform periodic backups.**
 ## Installation
 
 ```bash
-# Install dependencies and build
-npm install
-npm run build
+# Enable Corepack and activate Yarn 4 (once per machine)
+corepack enable
+corepack prepare yarn@4.1.1 --activate
 
-# Install globally (optional)
-npm run install-global
+# Install dependencies and build
+yarn install
+yarn build
 ```
 
-After installing globally, you can use `proton-drive` from anywhere. Otherwise, use `node dist/index.js`.
+For local development, invoke the CLI directly with `node dist/index.js`.
 
 ## Usage
 
@@ -42,8 +43,11 @@ After installing globally, you can use `proton-drive` from anywhere. Otherwise, 
 # Login (interactive prompts)
 proton-drive login
 
-# Login with username
+# Login with username (password prompted interactively)
 proton-drive login -u your.email@proton.me
+
+# Login with piped password (for scripts / special characters)
+echo "your-password" | proton-drive login -u your.email@proton.me --password-stdin
 
 # Check authentication status
 proton-drive status
@@ -52,37 +56,81 @@ proton-drive status
 proton-drive logout
 ```
 
-Session credentials are stored in `~/.proton-drive-cli/session.json`.
+Session tokens (no passwords) are stored in `~/.proton-drive-cli/session.json` with `0600` permissions.
+
+**Passwords are never accepted via CLI flags or environment variables.** This prevents leaks via `ps`, `/proc/pid/environ`, and shell history. Use interactive prompts or `--password-stdin`.
 
 **CAPTCHA Support:** If CAPTCHA verification is required during login, the CLI will guide you through the semi-automated token extraction process.
 
-#### Passwords with Special Characters
+#### Credential Providers
 
-For passwords containing special characters (like `:`, `\`, `)`, `!`, `$`, etc.), use one of these methods to avoid shell escaping issues:
+The CLI supports multiple credential providers via `--credential-provider`:
+
+**Git Credential Manager** (`--credential-provider git`):
 
 ```bash
-# Method 1: Environment variables (recommended for automation)
-PROTON_USERNAME="user@proton.me" PROTON_PASSWORD='your:complex\password!' proton-drive login
-
-# Method 2: Read password from stdin
-echo 'your:complex\password!' | proton-drive login -u user@proton.me --password-stdin
-
-# Method 3: Use a password file
-cat /path/to/password.txt | proton-drive login -u user@proton.me --password-stdin
+# Store credentials in the system credential helper (macOS Keychain, etc.)
+proton-drive credential store -u your.email@proton.me
+# Verify credentials are stored
+proton-drive credential verify
+# Login using stored credentials
+proton-drive login --credential-provider git
+# Use with any command
+proton-drive ls / --credential-provider git
+proton-drive upload ./file.pdf /Documents --credential-provider git
+# Remove stored credentials
+proton-drive credential remove -u your.email@proton.me
 ```
 
-**Environment Variables:**
-- `PROTON_USERNAME` - Account email address
-- `PROTON_PASSWORD` - Account password (handles all special characters correctly)
+This uses `git credential fill/approve/reject` under the hood, delegating to the system's configured credential helper.
+
+**Scripted usage** (pipe credentials):
+
+```bash
+echo "password" | proton-drive credential store -u user@proton.me --password-stdin
+```
+
+#### Git LFS Integration (pass-cli)
+
+When used through `proton-git-lfs` (`Go adapter -> proton-lfs-bridge -> proton-drive-cli`), credentials are resolved via `pass-cli` and passed over stdin. In that flow, do not run `proton-drive login` manually.
+
+From the `proton-git-lfs` repository root:
+
+```bash
+pass-cli login
+eval "$(make -s pass-env)"
+make build-drive-cli
+export SDK_BACKEND_MODE=proton-drive-cli
+make check-sdk-prereqs
+make test-integration-sdk
+```
+
+Default pass references:
+- `pass://Personal/Proton Git LFS/username`
+- `pass://Personal/Proton Git LFS/password`
+
+#### Git LFS Integration (git-credential)
+
+Alternatively, use git credential manager instead of pass-cli:
+
+```bash
+# Store credentials once
+proton-drive credential store -u your.email@proton.me
+
+# Configure the Go adapter to use git-credential
+export PROTON_CREDENTIAL_PROVIDER=git-credential
+```
+
+In this mode, `proton-drive-cli` resolves credentials locally via `git credential fill` — credentials are never sent over HTTP to the LFS bridge.
 
 ### Session Management
 
-Ideally the CLI would refresh the token automatically, this is NOT working at the moment. 
+Ideally the CLI would refresh the token automatically. This is NOT working at the moment.
 
 ### List Files
 
 ```bash
-# List files in root directory
+# List files in root directory (password prompted interactively)
 proton-drive ls /
 
 # List files in a subdirectory
@@ -91,6 +139,9 @@ proton-drive ls /Documents
 # Show detailed information (table format)
 proton-drive ls / --long
 proton-drive ls /Documents -l
+
+# With piped password
+echo "password" | proton-drive ls / --password-stdin
 ```
 
 ### Upload Files
@@ -102,20 +153,16 @@ proton-drive upload ./myfile.pdf /
 # Upload to a subdirectory
 proton-drive upload ./document.pdf /Documents
 
-# Upload with a different name (rename during upload)
+# Upload with a different name
 proton-drive upload ./local-file.tar /backup.tar
 proton-drive upload ./report.pdf /Documents/monthly-report.pdf
-
-# Upload with automatic MIME type detection
-proton-drive upload ./photo.jpg /Photos
 
 # Disable progress output
 proton-drive upload ./file.txt / --no-progress
 
-# Upload from stdin (pipe from other commands)
+# Upload from stdin
 cat myfile.txt | proton-drive upload - /Documents/myfile.txt
 echo "Hello World" | proton-drive upload - /test.txt
-curl https://example.com/file.pdf | proton-drive upload - /Downloads/file.pdf
 
 # Upload from stdin with --name flag
 cat data.json | proton-drive upload - /Documents --name data.json
@@ -142,9 +189,6 @@ proton-drive mkdir / MyFolder
 
 # Create a subfolder
 proton-drive mkdir /Documents Projects
-
-# Create nested folders
-proton-drive mkdir /Documents/Projects 2024
 ```
 
 ## Global Options
@@ -157,23 +201,9 @@ proton-drive mkdir /Documents/Projects 2024
 
 ### Output Modes
 
-The CLI supports three output modes for different use cases:
-
-- **Normal (default)** - Minimal output suitable for scripting. Commands output just the essential information (file IDs, filenames, etc.)
-- **Verbose (`--verbose`)** - Detailed output with spinners, progress bars, colors, and tables. Best for interactive use.
-- **Quiet (`-q, --quiet`)** - Only errors are shown. Useful when you only care about failures.
-
-Examples:
-```bash
-# Minimal output for scripts
-proton-drive ls /Documents
-
-# Detailed output for interactive use
-proton-drive --verbose ls /Documents
-
-# Silent unless error occurs
-proton-drive --quiet upload file.txt /
-```
+- **Normal (default)** - Minimal output suitable for scripting
+- **Verbose (`--verbose`)** - Detailed output with spinners, progress bars, colors, and tables
+- **Quiet (`-q, --quiet`)** - Only errors are shown
 
 ## How It Works
 
@@ -182,7 +212,7 @@ proton-drive --quiet upload file.txt /
 All file operations use end-to-end encryption following Proton Drive's protocol:
 
 **Upload Process:**
-1. **Key Hierarchy**: User Key → Address Key → Share Key → Node Key → Content Key
+1. **Key Hierarchy**: User Key -> Address Key -> Share Key -> Node Key -> Content Key
 2. **Block Encryption**: Files are split into 4MB blocks, each encrypted with a session key
 3. **Signatures**: Blocks are signed with your address key before encryption
 4. **Verification**: Each block includes a verification token to ensure integrity
@@ -202,6 +232,7 @@ All file operations use end-to-end encryption following Proton Drive's protocol:
 src/
 ├── auth/          - SRP authentication and session management
 ├── api/           - Proton API clients (auth, user, drive)
+├── bridge/        - Shared types and validators (exported for proton-lfs-bridge)
 ├── crypto/        - Cryptographic operations (OpenPGP, key management)
 ├── drive/         - Drive operations (upload, chunking, encryption)
 ├── cli/           - Command-line interface
@@ -210,12 +241,14 @@ src/
 
 ## Security
 
-- Session file stores revocable tokens only. Passwords are never persisted to disk.
-- The mailbox password must be provided on every operation via `--password`, `PROTON_PASSWORD` env var, or interactive prompt.
-- Credential flow (Git LFS mode): pass-cli -> Go adapter -> stdin -> proton-drive-cli (memory only)
+- **Passwords are never persisted to disk.** The session file stores only revocable tokens.
+- **Passwords are never accepted via CLI flags or environment variables.** Use `--password-stdin` or interactive prompts only. This prevents exposure via `ps`, `/proc`, or shell history.
+- **Credential flow (pass-cli mode):** pass-cli -> Go adapter -> stdin -> proton-drive-cli (memory only)
+- **Credential flow (git-credential mode):** git credential helper -> proton-drive-cli (local resolution, never sent over HTTP)
 - All encryption happens locally before upload
 - Private keys are decrypted in memory and never written to disk
-- Session files store tokens with 0600 permissions
+- Session directory: `0700`; session file: `0600` (owner-only)
+- All logging goes through the logger (respects log level); no `console.log` in library code
 
 
 ## License
