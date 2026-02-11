@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "description": "Command-line interface for Proton Drive with end-to-end encrypted file operations",
+  "description": "End-to-end encrypted CLI for Proton Drive with Git LFS bridge support",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
