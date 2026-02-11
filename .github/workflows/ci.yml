@@ -37,7 +37,7 @@ jobs:
         run: cd submodules/sdk/js/sdk && npm install && npm run build
 
       - name: Install dependencies
-        run: yarn install
+        run: YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
 
       - name: Build (tsc)
         run: yarn build
@@ -65,7 +65,7 @@ jobs:
         run: cd submodules/sdk/js/sdk && npm install && npm run build
 
       - name: Install dependencies
-        run: yarn install
+        run: YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
 
       - name: Build
         run: yarn build
