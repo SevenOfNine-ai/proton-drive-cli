@@ -56,6 +56,9 @@
     "url": "https://github.com/SevenOfNine-ai/proton-git-lfs/issues"
   },
   "homepage": "https://github.com/SevenOfNine-ai/proton-git-lfs/tree/main/submodules/proton-drive-cli#readme",
+  "bundledDependencies": [
+    "@protontech/drive-sdk"
+  ],
   "publishConfig": {
     "access": "public"
   },
