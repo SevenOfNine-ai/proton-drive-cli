@@ -20,8 +20,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Init submodules (non-recursive)
+        run: git submodule update --init --depth=1
 
       - uses: actions/setup-node@v4
         with:
@@ -39,8 +40,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Init submodules (non-recursive)
+        run: git submodule update --init --depth=1
 
       - uses: actions/setup-node@v4
         with:
