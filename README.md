@@ -109,13 +109,13 @@ proton-drive rm /Documents/old-file.pdf --permanent
 
 ### Global Options
 
-| Flag | Description |
-|------|-------------|
-| `-d, --debug` | Enable debug output with full stack traces |
-| `--verbose` | Show detailed output (spinners, progress, tables) |
-| `-q, --quiet` | Suppress all non-error output |
-| `-v, --version` | Display version number |
-| `--credential-provider` | Credential source: `git` or default (stdin) |
+| Flag                    | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| `-d, --debug`           | Enable debug output with full stack traces        |
+| `--verbose`             | Show detailed output (spinners, progress, tables) |
+| `-q, --quiet`           | Suppress all non-error output                     |
+| `-v, --version`         | Display version number                            |
+| `--credential-provider` | Credential source: `git` or default (stdin)       |
 
 ## Documentation
 

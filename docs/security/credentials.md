@@ -69,12 +69,12 @@ Reads password from stdin with a 5-second timeout. No shell history exposure.
 
 ## What Is Never Allowed
 
-| Vector | Status | Rationale |
-|--------|--------|-----------|
-| Password in CLI flags | Rejected | Visible via `ps aux`, `/proc/pid/cmdline` |
-| Password in env vars | Rejected | Visible via `/proc/pid/environ`, child processes |
-| Password on disk | Rejected | Only revocable session tokens are persisted |
-| Password in logs | Rejected | Debug logging redacts credential fields |
+| Vector                | Status   | Rationale                                          |
+| --------------------- | -------- | -------------------------------------------------- |
+| Password in CLI flags | Rejected | Visible via `ps aux`, `/proc/pid/cmdline`          |
+| Password in env vars  | Rejected | Visible via `/proc/pid/environ`, child processes   |
+| Password on disk      | Rejected | Only revocable session tokens are persisted        |
+| Password in logs      | Rejected | Debug logging redacts credential fields            |
 
 ## Authentication Flow (SRP-6a)
 

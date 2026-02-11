@@ -2,10 +2,10 @@
 
 ## Session Storage
 
-| Path | Permissions | Contents |
-|------|-------------|----------|
-| `~/.proton-drive-cli/` | `0700` | Session directory |
-| `~/.proton-drive-cli/session.json` | `0600` | Access token, refresh token, session ID |
+| Path                               | Permissions | Contents                                |
+| ---------------------------------- | ----------- | --------------------------------------- |
+| `~/.proton-drive-cli/`             | `0700`      | Session directory                       |
+| `~/.proton-drive-cli/session.json` | `0600`      | Access token, refresh token, session ID |
 
 Session tokens are the only data persisted to disk. Passwords are never stored.
 
@@ -13,23 +13,23 @@ Session tokens are the only data persisted to disk. Passwords are never stored.
 
 The CLI itself does not read credentials from environment variables. The following are used by the parent `proton-git-lfs` Go adapter:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PROTON_CREDENTIAL_PROVIDER` | `pass-cli` | Credential source: `pass-cli` or `git-credential` |
-| `PROTON_PASS_CLI_BIN` | `pass-cli` | Path to pass-cli binary |
-| `PROTON_PASS_REF_ROOT` | — | pass:// reference root |
-| `PROTON_PASS_USERNAME_REF` | — | pass:// reference for username |
-| `PROTON_PASS_PASSWORD_REF` | — | pass:// reference for password |
+| Variable                       | Default    | Description                                        |
+| ------------------------------ | ---------- | -------------------------------------------------- |
+| `PROTON_CREDENTIAL_PROVIDER`   | `pass-cli` | Credential source: `pass-cli` or `git-credential`  |
+| `PROTON_PASS_CLI_BIN`          | `pass-cli` | Path to pass-cli binary                            |
+| `PROTON_PASS_REF_ROOT`         | —          | pass:// reference root                             |
+| `PROTON_PASS_USERNAME_REF`     | —          | pass:// reference for username                     |
+| `PROTON_PASS_PASSWORD_REF`     | —          | pass:// reference for password                     |
 
 ## CLI Global Options
 
-| Flag | Description |
-|------|-------------|
-| `-d, --debug` | Enable debug output with full stack traces |
-| `--verbose` | Show detailed output (spinners, progress, tables) |
-| `-q, --quiet` | Suppress all non-error output |
-| `-v, --version` | Display version number |
-| `--credential-provider <type>` | Credential source: `git` (git-credential) or default (stdin) |
+| Flag                             | Description                                                  |
+| -------------------------------- | ------------------------------------------------------------ |
+| `-d, --debug`                    | Enable debug output with full stack traces                   |
+| `--verbose`                      | Show detailed output (spinners, progress, tables)            |
+| `-q, --quiet`                    | Suppress all non-error output                                |
+| `-v, --version`                  | Display version number                                       |
+| `--credential-provider <type>`   | Credential source: `git` (git-credential) or default (stdin) |
 
 ## Build and Development
 

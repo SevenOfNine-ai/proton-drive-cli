@@ -53,14 +53,14 @@ Same auth flow as above (credentials never sent over HTTP)
 
 The `src/sdk/` directory adapts `@protontech/drive-sdk` for CLI usage:
 
-| Adapter | Purpose |
-|---------|---------|
+| Adapter                | Purpose                                                                 |
+| ---------------------- | ----------------------------------------------------------------------- |
 | `httpClientAdapter.ts` | HTTP client with auto token refresh, `x-pm-appversion` header injection |
-| `cryptoProxy.ts` | OpenPGP crypto proxy for drive-sdk |
-| `accountAdapter.ts` | Account and address key provider |
-| `srpAdapter.ts` | SRP module adapter |
-| `pathResolver.ts` | Human-readable path to Proton Drive UID resolution |
-| `client.ts` | `ProtonDriveClient` factory with session reuse |
+| `cryptoProxy.ts`       | OpenPGP crypto proxy for drive-sdk                                      |
+| `accountAdapter.ts`    | Account and address key provider                                        |
+| `srpAdapter.ts`        | SRP module adapter                                                      |
+| `pathResolver.ts`      | Human-readable path to Proton Drive UID resolution                      |
+| `client.ts`            | `ProtonDriveClient` factory with session reuse                          |
 
 ## Source Layout
 

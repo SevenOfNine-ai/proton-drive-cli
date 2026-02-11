@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -14,11 +15,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Build and deploy to GitHub Pages
+  docs-quality:
+    name: Markdown lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@v22
+        with:
+          config: .markdownlint.json
+          globs: |
+            README.md
+            SUMMARY.md
+            SECURITY.md
+            docs/**/*.md
+
+  deploy:
+    name: Build and deploy to GitHub Pages
+    needs: docs-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
 
     permissions:
       contents: read
