@@ -20,8 +20,6 @@ type PrivateKey = { readonly _idx: any; readonly _dummyType: 'private' };
 type PublicKey = { readonly _idx: any };
 type SessionKey = { data: Uint8Array };
 
-function toAny(v: any): any { return v; }
-
 export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
   async generateKey(options: {
     userIDs: { name: string }[];
@@ -110,7 +108,7 @@ export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
     if (options.armoredMessage) {
       message = await openpgp.readMessage({ armoredMessage: options.armoredMessage });
     } else if (options.binaryMessage) {
-      message = await openpgp.readMessage({ binaryMessage: toAny(options.binaryMessage) });
+      message = await openpgp.readMessage({ binaryMessage: options.binaryMessage as any });
     } else {
       return undefined;
     }
@@ -137,7 +135,7 @@ export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
     compress?: boolean;
   }): Promise<any> {
     const format = options.format || 'armored';
-    const message = await openpgp.createMessage({ binary: toAny(options.binaryData) });
+    const message = await openpgp.createMessage({ binary: options.binaryData as any });
 
     const encOpts: any = {
       message,
@@ -198,7 +196,7 @@ export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
     if (options.armoredMessage) {
       message = await openpgp.readMessage({ armoredMessage: options.armoredMessage });
     } else if (options.binaryMessage) {
-      message = await openpgp.readMessage({ binaryMessage: toAny(options.binaryMessage) });
+      message = await openpgp.readMessage({ binaryMessage: options.binaryMessage as any });
     } else {
       throw new Error('Either armoredMessage or binaryMessage must be provided');
     }
@@ -236,7 +234,7 @@ export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
     if (options.armoredSignature) {
       decOpts.signature = await openpgp.readSignature({ armoredSignature: options.armoredSignature });
     } else if (options.binarySignature) {
-      decOpts.signature = await openpgp.readSignature({ binarySignature: toAny(options.binarySignature) });
+      decOpts.signature = await openpgp.readSignature({ binarySignature: options.binarySignature as any });
     }
 
     const result = await openpgp.decrypt(decOpts);
@@ -268,7 +266,7 @@ export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
     detached: boolean;
     signatureContext?: { critical: boolean; value: string };
   }): Promise<any> {
-    const message = await openpgp.createMessage({ binary: toAny(options.binaryData) });
+    const message = await openpgp.createMessage({ binary: options.binaryData as any });
     const pgpKeys = Array.isArray(options.signingKeys)
       ? options.signingKeys
       : [options.signingKeys];
@@ -305,7 +303,7 @@ export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
     verificationStatus: 0 | 1 | 2;
     errors?: Error[];
   }> {
-    const message = await openpgp.createMessage({ binary: toAny(options.binaryData) });
+    const message = await openpgp.createMessage({ binary: options.binaryData as any });
     const pgpKeys = Array.isArray(options.verificationKeys)
       ? options.verificationKeys
       : [options.verificationKeys];
@@ -314,7 +312,7 @@ export class ProtonOpenPGPCryptoProxy implements OpenPGPCryptoProxy {
     if (options.armoredSignature) {
       signature = await openpgp.readSignature({ armoredSignature: options.armoredSignature });
     } else if (options.binarySignature) {
-      signature = await openpgp.readSignature({ binarySignature: toAny(options.binarySignature) });
+      signature = await openpgp.readSignature({ binarySignature: options.binarySignature as any });
     } else {
       return { verificationStatus: 0 };
     }

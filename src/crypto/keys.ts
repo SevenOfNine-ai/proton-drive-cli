@@ -1,5 +1,6 @@
 import * as openpgp from '@protontech/openpgp';
 import { Address, AddressKey } from '../types/crypto';
+import { logger } from '../utils/logger';
 
 /**
  * Decrypt a private key with a passphrase
@@ -61,7 +62,7 @@ export async function decryptAllAddressKeys(
         keys.push(decryptedKey);
       } catch (error) {
         // Skip keys that can't be decrypted
-        console.warn(`Failed to decrypt key ${key.ID}: ${error}`);
+        logger.warn(`Failed to decrypt key ${key.ID}: ${error instanceof Error ? error.message : error}`);
       }
     }
   }

@@ -143,7 +143,7 @@ export function createCredentialCommand(): Command {
           console.log(chalk.green('Credentials found:'));
           console.log(`  ${chalk.dim('Host:')}     ${cred.host}`);
           console.log(`  ${chalk.dim('Username:')} ${cred.username}`);
-          console.log(`  ${chalk.dim('Password:')} ${'*'.repeat(Math.min(cred.password.length, 20))}`);
+          console.log(`  ${chalk.dim('Password:')} ${'*'.repeat(20)}`);
         }
       } catch (error) {
         handleError(error, process.env.DEBUG === 'true');

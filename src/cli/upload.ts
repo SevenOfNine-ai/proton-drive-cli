@@ -147,7 +147,7 @@ export function createUploadCommand(): Command {
         const parentUid = await ensureFolderPath(client, uploadDestination);
 
         // Upload file via SDK
-        const fileStream = require('fs').createReadStream(actualFilePath);
+        const fileStream = (await import('fs')).createReadStream(actualFilePath);
         const webStream = Readable.toWeb(fileStream) as ReadableStream;
 
         let progressSpinner: any = null;

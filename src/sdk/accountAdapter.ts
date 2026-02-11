@@ -10,17 +10,12 @@ import type {
   ProtonDriveAccountAddress,
 } from '@protontech/drive-sdk';
 import { DriveCryptoService } from '../crypto/drive-crypto';
-import { UserApiClient } from '../api/user';
 
 // PublicKey is not re-exported from SDK top-level; define compatible alias
 type PublicKey = { readonly _idx: any };
 
 export class AccountAdapter implements ProtonDriveAccount {
-  private userApi: UserApiClient;
-
-  constructor(private driveCrypto: DriveCryptoService) {
-    this.userApi = new UserApiClient();
-  }
+  constructor(private driveCrypto: DriveCryptoService) {}
 
   async getOwnPrimaryAddress(): Promise<ProtonDriveAccountAddress> {
     const addressId = this.driveCrypto.getPrimaryAddressId();

@@ -54,7 +54,7 @@ async function downloadCommand(sourcePath: string, outputPath: string, options: 
     const downloader = await client.getFileDownloader(nodeUid);
     const claimedSize = downloader.getClaimedSizeInBytes() || 0;
 
-    const fileStream = require('fs').createWriteStream(outputPath);
+    const fileStream = (await import('fs')).createWriteStream(outputPath);
     const webStream = Writable.toWeb(fileStream) as WritableStream;
 
     const onProgress = (downloaded: number) => {
@@ -65,7 +65,7 @@ async function downloadCommand(sourcePath: string, outputPath: string, options: 
         const total = claimedSize || downloaded;
         const progress = total > 0 ? (downloaded / total) * 100 : 0;
         const elapsed = (now - startTime) / 1000;
-        const speed = downloaded / elapsed;
+        const speed = elapsed > 0 ? downloaded / elapsed : 0;
         const remaining = total > 0 ? (total - downloaded) / speed : 0;
 
         const message =

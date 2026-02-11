@@ -62,6 +62,10 @@ export class SRPClient {
    * @param expectedProof - Expected proof calculated during handshake
    */
   static verifyServerProof(serverProof: string, expectedProof: string): boolean {
-    return serverProof === expectedProof;
+    if (serverProof.length !== expectedProof.length) return false;
+    const a = Buffer.from(serverProof, 'base64');
+    const b = Buffer.from(expectedProof, 'base64');
+    if (a.length !== b.length) return false;
+    return require('crypto').timingSafeEqual(a, b);
   }
 }

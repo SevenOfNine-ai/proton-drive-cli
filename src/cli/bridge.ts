@@ -203,7 +203,7 @@ async function handleUploadCommand(request: BridgeRequest): Promise<void> {
     const parentUid = await ensureFolderPath(client, parentPath);
     const stat = await fs.stat(filePath);
 
-    const fileStream = require('fs').createReadStream(filePath);
+    const fileStream = (await import('fs')).createReadStream(filePath);
     const webStream = Readable.toWeb(fileStream) as ReadableStream;
 
     const uploader = await client.getFileUploader(parentUid, fileName, {
@@ -249,7 +249,7 @@ async function handleDownloadCommand(request: BridgeRequest): Promise<void> {
 
     // Download via SDK
     const downloader = await client.getFileDownloader(nodeUid);
-    const fileStream = require('fs').createWriteStream(outputPath);
+    const fileStream = (await import('fs')).createWriteStream(outputPath);
     const webStream = Writable.toWeb(fileStream) as WritableStream;
 
     const ctrl = downloader.downloadToStream(webStream);

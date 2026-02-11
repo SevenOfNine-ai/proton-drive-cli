@@ -1,7 +1,7 @@
 import * as openpgp from '@protontech/openpgp';
 import { CryptoService } from './index';
 import { UserApiClient } from '../api/user';
-import { decryptAddressKey, decryptAllAddressKeys } from './keys';
+import { decryptAddressKey } from './keys';
 import { DecryptedShareContext, DecryptedNodeContext, User, Address } from '../types/crypto';
 import { Share, Link } from '../types/drive';
 import { deriveKeyPassphrase } from './key-password';

@@ -107,8 +107,9 @@ export async function listFolder(
           ? Math.floor(child.value.modificationTime.getTime() / 1000)
           : 0,
       });
+    } else {
+      logger.debug(`Skipping degraded node: ${JSON.stringify(child.error)}`);
     }
-    // Skip degraded nodes silently (equivalent to old catch-continue)
   }
 
   return items;

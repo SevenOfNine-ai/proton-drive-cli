@@ -21,6 +21,8 @@ export async function resolvePathToNodeUid(
   client: ProtonDriveClient,
   path: string,
 ): Promise<string> {
+  if (path.includes('\0')) throw new Error('Null byte in path');
+  if (path.split(/[/\\]/).includes('..')) throw new Error('Path traversal not allowed');
   const parts = path.split('/').filter((p) => p.length > 0);
 
   const root = await client.getMyFilesRootFolder();
@@ -57,6 +59,8 @@ export async function ensureFolderPath(
   client: ProtonDriveClient,
   path: string,
 ): Promise<string> {
+  if (path.includes('\0')) throw new Error('Null byte in path');
+  if (path.split(/[/\\]/).includes('..')) throw new Error('Path traversal not allowed');
   const parts = path.split('/').filter((p) => p.length > 0);
 
   const root = await client.getMyFilesRootFolder();
