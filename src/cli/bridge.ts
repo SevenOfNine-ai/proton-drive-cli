@@ -178,9 +178,13 @@ async function handleAuthCommand(request: BridgeRequest): Promise<void> {
 
     // Session reuse: skip SRP if a valid session already exists
     const authService = new AuthService();
-    if (await authService.isAuthenticated()) {
-      writeSuccess({ authenticated: true, sessionReused: true });
-      return;
+    try {
+      if (await authService.isAuthenticated()) {
+        writeSuccess({ authenticated: true, sessionReused: true });
+        return;
+      }
+    } catch {
+      // Session file corrupted or unreadable — fall through to full login
     }
 
     await authService.login(resolved.username, resolved.password, undefined);

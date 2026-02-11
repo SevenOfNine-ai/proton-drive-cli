@@ -1,6 +1,6 @@
 {
   "name": "@sevenofnine-ai/proton-drive-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "description": "End-to-end encrypted CLI for Proton Drive with Git LFS bridge support",
