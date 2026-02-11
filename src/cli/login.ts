@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { AuthService } from '../auth';
 import { promptForToken } from '../auth/captcha-helper';
+import { CaptchaError } from '../errors/types';
 import { handleError } from '../errors/handler';
 import { isVerbose, isQuiet, outputResult } from '../utils/output';
 import { readPasswordFromStdin, resolveCredentials } from '../utils/password';
@@ -128,19 +129,19 @@ export function createLoginCommand(): Command {
           } else if (!isQuiet()) {
             outputResult('OK');
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (spinner) {
             spinner.stop();
           }
 
           // Check if CAPTCHA is required
-          if (error.requiresCaptcha) {
+          if (error instanceof CaptchaError) {
             console.log(chalk.yellow('\n⚠️  CAPTCHA verification required'));
 
             // Use the CAPTCHA helper to get the token
             const verificationToken = await promptForToken(
               error.captchaUrl,
-              error.captchaToken || ''
+              error.captchaToken
             );
 
             if (!verificationToken) {
@@ -157,9 +158,9 @@ export function createLoginCommand(): Command {
                 console.log(chalk.dim('Session saved (tokens only). Use --password-stdin with subsequent commands.'));
                 console.log('\nYou can now use the CLI to upload files to Proton Drive.');
                 return;
-              } catch (retryError: any) {
+              } catch (retryError: unknown) {
                 retrySpinner.fail();
-                if (retryError.requiresCaptcha) {
+                if (retryError instanceof CaptchaError) {
                   console.error(chalk.red('\n✗ Still getting CAPTCHA challenge.'));
                   console.error('The IP allowlisting may not have worked.');
                   console.error('Try the manual token extraction method instead.');
@@ -175,16 +176,16 @@ export function createLoginCommand(): Command {
               verifySpinner.succeed(chalk.green('Login successful!'));
               console.log(chalk.dim('Session saved (tokens only). Use --password-stdin with subsequent commands.'));
               console.log('\nYou can now use the CLI to upload files to Proton Drive.');
-            } catch (retryError: any) {
+            } catch (retryError: unknown) {
               verifySpinner.fail();
-              if (retryError.requiresCaptcha) {
+              if (retryError instanceof CaptchaError) {
                 console.error(chalk.yellow('\n⚠️  Still getting CAPTCHA challenge'));
                 console.error('The token may be invalid or expired.');
                 console.error(chalk.dim('\nTry the alternative approach:'));
                 console.error('  1. Log in at https://account.proton.me in your browser');
                 console.error('  2. Complete any CAPTCHA there');
                 console.error('  3. Then try this CLI login again');
-              } else if (retryError.response?.data?.Code === 12087) {
+              } else if ((retryError as any)?.response?.data?.Code === 12087) {
                 console.error(chalk.yellow('\n⚠️  CAPTCHA validation failed (code 12087)'));
                 console.error('The token was not accepted by the server.');
                 console.error(chalk.dim('\nThis can happen if:'));

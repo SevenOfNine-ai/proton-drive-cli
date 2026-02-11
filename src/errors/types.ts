@@ -37,6 +37,9 @@ export enum ErrorCode {
   INVALID_PATH = 'INVALID_PATH',
   NOT_A_FOLDER = 'NOT_A_FOLDER',
 
+  // CAPTCHA
+  CAPTCHA_REQUIRED = 'CAPTCHA_REQUIRED',
+
   // Generic
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
   VALIDATION_ERROR = 'VALIDATION_ERROR',
@@ -124,6 +127,9 @@ export class AppError extends Error {
       case ErrorCode.DECRYPTION_FAILED:
         return 'Decryption failed. This may indicate corrupted data or wrong keys.';
 
+      case ErrorCode.CAPTCHA_REQUIRED:
+        return 'CAPTCHA verification required. Please complete the verification and try again.';
+
       case ErrorCode.OPERATION_CANCELLED:
         return 'Operation cancelled by user.';
 
@@ -167,8 +173,35 @@ export class AppError extends Error {
       case ErrorCode.DISK_FULL:
         return 'Free up disk space on your local machine';
 
+      case ErrorCode.CAPTCHA_REQUIRED:
+        return 'Run: proton-drive login (interactive CAPTCHA flow will guide you)';
+
       default:
         return null;
     }
+  }
+}
+
+/**
+ * CAPTCHA verification error with structured metadata
+ */
+export class CaptchaError extends AppError {
+  public readonly captchaUrl: string;
+  public readonly captchaToken: string;
+  public readonly verificationMethods: string[];
+
+  constructor(options: {
+    captchaUrl: string;
+    captchaToken: string;
+    verificationMethods?: string[];
+  }) {
+    super('CAPTCHA verification required', ErrorCode.CAPTCHA_REQUIRED, {
+      captchaUrl: options.captchaUrl,
+      captchaToken: options.captchaToken,
+    }, true);
+    this.name = 'CaptchaError';
+    this.captchaUrl = options.captchaUrl;
+    this.captchaToken = options.captchaToken;
+    this.verificationMethods = options.verificationMethods || [];
   }
 }

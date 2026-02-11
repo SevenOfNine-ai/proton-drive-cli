@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { AuthApiClient } from './auth';
+import { CaptchaError } from '../errors/types';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -81,8 +82,8 @@ describe('AuthApiClient', () => {
         await client.getAuthInfo('user@proton.me');
         fail('Should have thrown');
       } catch (error: any) {
+        expect(error).toBeInstanceOf(CaptchaError);
         expect(error.message).toBe('CAPTCHA verification required');
-        expect(error.requiresCaptcha).toBe(true);
         expect(error.captchaUrl).toBe('https://verify.proton.me');
         expect(error.captchaToken).toBe('hvt-123');
         expect(error.verificationMethods).toEqual(['captcha']);
@@ -138,7 +139,11 @@ describe('AuthApiClient', () => {
     });
 
     test('includes CAPTCHA headers when token provided', async () => {
-      mockPost.mockResolvedValue({ data: {} });
+      mockPost.mockResolvedValue({ data: {
+        UID: 'u', AccessToken: 'a', RefreshToken: 'r', ServerProof: 's',
+        Scopes: [], PasswordMode: 1, TokenType: 'Bearer',
+        '2FA': { Enabled: 0, FIDO2: { RegisteredKeys: [] }, TOTP: 0 },
+      } });
 
       await client.authenticate('user', 'eph', 'proof', 'session', 'captcha-xyz');
 
@@ -172,7 +177,7 @@ describe('AuthApiClient', () => {
         await client.authenticate('user', 'eph', 'proof', 'session');
         fail('Should have thrown');
       } catch (error: any) {
-        expect(error.requiresCaptcha).toBe(true);
+        expect(error).toBeInstanceOf(CaptchaError);
       }
     });
   });

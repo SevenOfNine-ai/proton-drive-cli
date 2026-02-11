@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { AuthInfoResponse, AuthResponse } from '../types/auth';
+import { CaptchaError } from '../errors/types';
 import { logger } from '../utils/logger';
 
 /**
@@ -48,15 +49,13 @@ export class AuthApiClient {
       return response.data;
     } catch (error: any) {
       if (error.response?.data?.Code === 9001) {
-        // CAPTCHA required
         const details = error.response.data.Details;
         logger.debug('getAuthInfo CAPTCHA error details:', JSON.stringify(details, null, 2));
-        const captchaError: any = new Error('CAPTCHA verification required');
-        captchaError.requiresCaptcha = true;
-        captchaError.captchaUrl = details.WebUrl;
-        captchaError.captchaToken = details.HumanVerificationToken;
-        captchaError.verificationMethods = details.HumanVerificationMethods;
-        throw captchaError;
+        throw new CaptchaError({
+          captchaUrl: details.WebUrl,
+          captchaToken: details.HumanVerificationToken,
+          verificationMethods: details.HumanVerificationMethods,
+        });
       }
 
       if (error.response) {
@@ -104,18 +103,21 @@ export class AuthApiClient {
         },
         { headers }
       );
-      return response.data;
+
+      const data = response.data;
+      if (!data.UID || !data.AccessToken || !data.RefreshToken || !data.ServerProof) {
+        throw new Error('Incomplete auth response: missing required tokens');
+      }
+      return data;
     } catch (error: any) {
       if (error.response?.data?.Code === 9001) {
-        // CAPTCHA required
         const details = error.response.data.Details;
         logger.debug('authenticate CAPTCHA error details:', JSON.stringify(details, null, 2));
-        const captchaError: any = new Error('CAPTCHA verification required');
-        captchaError.requiresCaptcha = true;
-        captchaError.captchaUrl = details.WebUrl;
-        captchaError.captchaToken = details.HumanVerificationToken;
-        captchaError.verificationMethods = details.HumanVerificationMethods;
-        throw captchaError;
+        throw new CaptchaError({
+          captchaUrl: details.WebUrl,
+          captchaToken: details.HumanVerificationToken,
+          verificationMethods: details.HumanVerificationMethods,
+        });
       }
 
       if (error.response) {
@@ -145,7 +147,12 @@ export class AuthApiClient {
     }, {
       headers: { 'x-pm-uid': uid },
     });
-    return response.data;
+
+    const data = response.data;
+    if (!data.AccessToken || !data.RefreshToken) {
+      throw new Error('Incomplete refresh response: missing tokens');
+    }
+    return data;
   }
 
   /**

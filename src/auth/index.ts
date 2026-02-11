@@ -2,6 +2,7 @@ import { AuthApiClient } from '../api/auth';
 import { SRPClient } from './srp';
 import { SessionManager } from './session';
 import { SessionCredentials } from '../types/auth';
+import { CaptchaError } from '../errors/types';
 import { jwtDecode } from 'jwt-decode';
 import { logger } from '../utils/logger';
 
@@ -72,10 +73,9 @@ export class AuthService {
       logger.debug(`Session saved (tokens only) to: ${SessionManager.getSessionFilePath()}`);
 
       return session;
-    } catch (error: any) {
-      // Preserve CAPTCHA error properties
-      if (error.requiresCaptcha) {
-        throw error; // Pass through CAPTCHA errors unchanged
+    } catch (error: unknown) {
+      if (error instanceof CaptchaError) {
+        throw error;
       }
 
       if (error instanceof Error) {

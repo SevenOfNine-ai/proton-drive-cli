@@ -2,6 +2,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { homedir } from 'os';
 import { randomBytes } from 'crypto';
+import { jwtDecode } from 'jwt-decode';
 import { SessionCredentials } from '../types/auth';
 import { logger } from '../utils/logger';
 
@@ -88,9 +89,23 @@ export class SessionManager {
     const session = await this.loadSession();
     if (!session) return false;
 
-    // TODO: Check if token is expired by decoding JWT
-    // For now, just check if required fields exist
-    return this.isValidSession(session);
+    if (!this.isValidSession(session)) return false;
+
+    // Check if access token is expired
+    try {
+      const decoded = jwtDecode<{ exp?: number }>(session.accessToken);
+      if (decoded.exp) {
+        const now = Math.floor(Date.now() / 1000);
+        if (decoded.exp <= now) {
+          logger.debug('Session access token has expired');
+          return false;
+        }
+      }
+    } catch {
+      // If token can't be decoded, treat session as valid (non-JWT tokens)
+    }
+
+    return true;
   }
 
   /**

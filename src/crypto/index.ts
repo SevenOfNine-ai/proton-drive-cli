@@ -50,7 +50,7 @@ export class CryptoService {
   async extractSessionKey(
     armoredMessage: string,
     privateKey: openpgp.PrivateKey
-  ): Promise<any> {
+  ): Promise<openpgp.DecryptedSessionKey> {
     const message = await openpgp.readMessage({ armoredMessage });
     const sessionKeys = await openpgp.decryptSessionKeys({
       message,
@@ -70,12 +70,12 @@ export class CryptoService {
    */
   async decryptWithSessionKey(
     armoredMessage: string,
-    sessionKey: any
+    sessionKey: openpgp.DecryptedSessionKey
   ): Promise<Uint8Array> {
     const message = await openpgp.readMessage({ armoredMessage });
     const { data } = await openpgp.decrypt({
       message,
-      sessionKeys: sessionKey,
+      sessionKeys: sessionKey as openpgp.SessionKey,
       format: 'binary'
     });
     return data as Uint8Array;

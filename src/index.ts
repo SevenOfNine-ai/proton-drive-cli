@@ -19,17 +19,18 @@ import { logger, LogLevel } from './utils/logger';
 // Setup graceful shutdown handlers
 setupShutdownHandlers();
 
-// Suppress OpenPGP.js debug output (expected decryption errors during key derivation)
-if (process.env.NODE_ENV !== 'development') {
-  const originalConsoleError = console.error;
-  console.error = (...args: any[]) => {
-    // Filter out OpenPGP.js debug messages
-    if (args[0]?.includes?.('[OpenPGP.js debug]')) {
-      return;
-    }
+// Suppress OpenPGP.js expected debug output (key derivation attempts).
+// OpenPGP.js has no config option to control this; monkey-patch is necessary.
+const originalConsoleError = console.error;
+console.error = (...args: any[]) => {
+  if (process.env.DEBUG === 'true') {
     originalConsoleError.apply(console, args);
-  };
-}
+    return;
+  }
+  const msg = typeof args[0] === 'string' ? args[0] : '';
+  if (msg.includes('[OpenPGP.js debug]')) return;
+  originalConsoleError.apply(console, args);
+};
 
 // Handle unhandled rejections
 process.on('unhandledRejection', (error: unknown) => {

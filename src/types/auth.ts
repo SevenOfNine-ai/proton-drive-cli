@@ -17,7 +17,7 @@ export interface AuthResponse {
   PasswordMode: number;      // 1 = single password, 2 = two password
   '2FA': {
     Enabled: number;
-    FIDO2: { RegisteredKeys: any[] };
+    FIDO2: { RegisteredKeys: Array<{ keyHandle: string; publicKey: string }> };
     TOTP: number;
   };
 }
