@@ -1,4 +1,15 @@
 # Summary
 
 - [Introduction](README.md)
-- [Security](SECURITY.md)
+
+## Architecture
+
+- [Overview](docs/architecture/overview.md)
+
+## Operations
+
+- [Configuration](docs/operations/configuration.md)
+
+## Security
+
+- [Credential Security](docs/security/credentials.md)
