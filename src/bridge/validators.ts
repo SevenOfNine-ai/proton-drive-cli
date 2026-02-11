@@ -3,9 +3,7 @@
  *
  * This module has NO transitive dependencies on chalk, DriveClient,
  * AuthService, or any other heavy module — only on errors/types.ts
- * (which itself has zero imports). This is critical because
- * proton-lfs-bridge imports the compiled output via require() and
- * cannot handle ESM-only transitive dependencies.
+ * (which itself has zero imports).
  */
 
 import { ErrorCode } from '../errors/types';
@@ -131,6 +129,7 @@ export function errorToStatusCode(error: any): number {
   if (code === ErrorCode.INVALID_FILE || code === ErrorCode.VALIDATION_ERROR || code === ErrorCode.INVALID_PATH) return 400;
   if (code === ErrorCode.FILE_TOO_LARGE) return 413;
   if (code === ErrorCode.RATE_LIMITED) return 429;
+  if (code === ErrorCode.CAPTCHA_REQUIRED) return 407;
   if (code === ErrorCode.OPERATION_CANCELLED) return 499;
   if (code === ErrorCode.TIMEOUT) return 504;
 
@@ -138,5 +137,6 @@ export function errorToStatusCode(error: any): number {
   if (msg.includes('not found')) return 404;
   if (msg.includes('unauthorized') || msg.includes('login failed')) return 401;
   if (msg.includes('invalid')) return 400;
+  if (msg.includes('captcha')) return 407;
   return 500;
 }
