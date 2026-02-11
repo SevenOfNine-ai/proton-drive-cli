@@ -86,7 +86,6 @@
   "dependencies": {
     "@protontech/drive-sdk": "file:./submodules/sdk/js/sdk",
     "@protontech/openpgp": "^6.2.2",
-    "openpgp": "npm:@protontech/openpgp@^6.2.2",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "boxen": "^7.1.1",
@@ -97,6 +96,7 @@
     "inquirer": "^8.2.7",
     "jwt-decode": "^4.0.0",
     "mime-types": "^3.0.2",
+    "openpgp": "npm:@protontech/openpgp@^6.2.2",
     "ora": "^9.0.0"
   }
 }

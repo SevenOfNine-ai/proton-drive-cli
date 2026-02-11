@@ -5,3 +5,18 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Yarn 4
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# Honkit build output
+_book/
+
+# npm pack tarballs
+*.tgz
