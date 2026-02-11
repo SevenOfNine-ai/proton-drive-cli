@@ -43,22 +43,9 @@ export function encodeUtf8(str: string): string {
 }
 
 /**
- * Decode UTF-8 string
- */
-export function decodeUtf8(str: string): string {
-  return decodeURIComponent(escape(str));
-}
-
-/**
  * Convert Uint8Array to string
  */
 export function uint8ArrayToString(arr: Uint8Array): string {
   return arrayToBinaryString(arr);
 }
 
-/**
- * Convert string to Uint8Array
- */
-export function stringToUint8Array(str: string): Uint8Array {
-  return binaryStringToArray(str);
-}

@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 import { program } from 'commander';
 import chalk from 'chalk';
+import { version as pkgVersion } from '../package.json';
 import { createLoginCommand, createLogoutCommand, createStatusCommand } from './cli/login';
 import { createLsCommand } from './cli/ls';
 import { createUploadCommand } from './cli/upload';
 import { createDownloadCommand } from './cli/download';
 import { createMkdirCommand } from './cli/mkdir';
+import { createBridgeCommand } from './cli/bridge';
+import { createCredentialCommand } from './cli/credential';
+import { createRmCommand } from './cli/rm';
+import { createMvCommand } from './cli/mv';
+import { createCatCommand } from './cli/cat';
+import { createInfoCommand } from './cli/info';
 import { setupShutdownHandlers } from './utils/shutdown';
 import { handleError } from './errors/handler';
 import { logger, LogLevel } from './utils/logger';
@@ -13,17 +20,18 @@ import { logger, LogLevel } from './utils/logger';
 // Setup graceful shutdown handlers
 setupShutdownHandlers();
 
-// Suppress OpenPGP.js debug output (expected decryption errors during key derivation)
-if (process.env.NODE_ENV !== 'development') {
-  const originalConsoleError = console.error;
-  console.error = (...args: any[]) => {
-    // Filter out OpenPGP.js debug messages
-    if (args[0]?.includes?.('[OpenPGP.js debug]')) {
-      return;
-    }
+// Suppress OpenPGP.js expected debug output (key derivation attempts).
+// OpenPGP.js has no config option to control this; monkey-patch is necessary.
+const originalConsoleError = console.error;
+console.error = (...args: any[]) => {
+  if (process.env.DEBUG === 'true') {
     originalConsoleError.apply(console, args);
-  };
-}
+    return;
+  }
+  const msg = typeof args[0] === 'string' ? args[0] : '';
+  if (msg.includes('[OpenPGP.js debug]')) return;
+  originalConsoleError.apply(console, args);
+};
 
 // Handle unhandled rejections
 process.on('unhandledRejection', (error: unknown) => {
@@ -43,7 +51,7 @@ program
     chalk.blue.bold('Proton Drive CLI') +
     '\n\nUpload and manage files in Proton Drive from the command line.'
   )
-  .version('0.1.0', '-v, --version', 'Display version')
+  .version(pkgVersion, '-v, --version', 'Display version')
   .option('-d, --debug', 'Enable debug output')
   .option('--verbose', 'Show detailed output (default is minimal for scripting)')
   .option('-q, --quiet', 'Suppress all non-error output')
@@ -78,6 +86,18 @@ program.addCommand(createUploadCommand());
 program.addCommand(createDownloadCommand());
 program.addCommand(createMkdirCommand());
 
+// Add file management commands
+program.addCommand(createRmCommand());
+program.addCommand(createMvCommand());
+program.addCommand(createCatCommand());
+program.addCommand(createInfoCommand());
+
+// Add bridge command (for Git LFS integration)
+program.addCommand(createBridgeCommand());
+
+// Add credential management command
+program.addCommand(createCredentialCommand());
+
 // Custom help
 program.on('--help', () => {
   console.log('');
@@ -86,7 +106,11 @@ program.on('--help', () => {
   console.log('  $ proton-drive upload ./file.pdf /Documents');
   console.log('  $ proton-drive ls /Documents');
   console.log('  $ proton-drive download /Documents/file.pdf ./downloads/');
-  console.log('  $ proton-drive mkdir /NewFolder');
+  console.log('  $ proton-drive mkdir /Documents NewFolder');
+  console.log('  $ proton-drive rm /Documents/old-file.pdf');
+  console.log('  $ proton-drive mv /Documents/file.pdf /Archive/file.pdf');
+  console.log('  $ proton-drive cat /Documents/notes.txt');
+  console.log('  $ proton-drive info /Documents/file.pdf');
   console.log('');
   console.log(chalk.dim('For more information on a specific command:'));
   console.log('  $ proton-drive <command> --help');

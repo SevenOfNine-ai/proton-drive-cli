@@ -1,7 +1,10 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { homedir } from 'os';
+import { randomBytes } from 'crypto';
+import { jwtDecode } from 'jwt-decode';
 import { SessionCredentials } from '../types/auth';
+import { logger } from '../utils/logger';
 
 /**
  * Session manager for storing and retrieving authentication credentials
@@ -18,14 +21,25 @@ export class SessionManager {
    */
   static async saveSession(session: SessionCredentials): Promise<void> {
     try {
-      // Ensure directory exists
-      await fs.ensureDir(SESSION_DIR);
+      // Ensure directory exists with owner-only permissions
+      await fs.ensureDir(SESSION_DIR, { mode: 0o700 });
 
-      // Write session data
-      await fs.writeJson(SESSION_FILE, session, { spaces: 2 });
+      // Strip mailboxPassword — passwords are never persisted to disk.
+      // The password flows via stdin on every bridge invocation (from pass-cli).
+      const { mailboxPassword, ...safeSession } = session as SessionCredentials & { mailboxPassword?: string };
 
-      // Set restrictive permissions (600 - read/write for owner only)
-      await fs.chmod(SESSION_FILE, 0o600);
+      // Write atomically: unique temp file with restrictive mode, then rename.
+      // Unique suffix prevents corruption from concurrent saveSession calls.
+      const suffix = `${process.pid}-${randomBytes(4).toString('hex')}`;
+      const tmpFile = `${SESSION_FILE}.tmp-${suffix}`;
+      try {
+        await fs.writeJson(tmpFile, safeSession, { spaces: 2, mode: 0o600 });
+        await fs.move(tmpFile, SESSION_FILE, { overwrite: true });
+      } catch (writeErr) {
+        // Clean up temp file on error to avoid leaking session data
+        await fs.remove(tmpFile).catch(() => {});
+        throw writeErr;
+      }
     } catch (error) {
       throw new Error(`Failed to save session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -44,12 +58,12 @@ export class SessionManager {
         if (this.isValidSession(session)) {
           return session;
         } else {
-          console.warn('Session file is corrupted or invalid. Please login again.');
+          logger.warn('Session file is corrupted or invalid. Please login again.');
           return null;
         }
       }
     } catch (error) {
-      console.error('Failed to load session:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Failed to load session:', error instanceof Error ? error.message : 'Unknown error');
     }
     return null;
   }
@@ -75,9 +89,23 @@ export class SessionManager {
     const session = await this.loadSession();
     if (!session) return false;
 
-    // TODO: Check if token is expired by decoding JWT
-    // For now, just check if required fields exist
-    return this.isValidSession(session);
+    if (!this.isValidSession(session)) return false;
+
+    // Check if access token is expired
+    try {
+      const decoded = jwtDecode<{ exp?: number }>(session.accessToken);
+      if (decoded.exp) {
+        const now = Math.floor(Date.now() / 1000);
+        if (decoded.exp <= now) {
+          logger.debug('Session access token has expired');
+          return false;
+        }
+      }
+    } catch {
+      // If token can't be decoded, treat session as valid (non-JWT tokens)
+    }
+
+    return true;
   }
 
   /**

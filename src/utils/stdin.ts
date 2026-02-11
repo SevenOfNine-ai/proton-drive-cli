@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { AppError, ErrorCode } from '../errors/types';
@@ -29,7 +30,7 @@ export async function readStdinToTempFile(): Promise<string> {
 
   // Create temp file
   const tmpDir = os.tmpdir();
-  const tmpFile = path.join(tmpDir, `proton-drive-upload-${Date.now()}-${Math.random().toString(36).substring(7)}`);
+  const tmpFile = path.join(tmpDir, `proton-drive-upload-${Date.now()}-${crypto.randomBytes(16).toString('hex')}`);
 
   try {
     // Write stdin to temp file

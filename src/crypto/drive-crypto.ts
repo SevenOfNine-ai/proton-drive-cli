@@ -1,10 +1,11 @@
-import * as openpgp from 'openpgp';
+import * as openpgp from '@protontech/openpgp';
 import { CryptoService } from './index';
 import { UserApiClient } from '../api/user';
-import { decryptAddressKey, decryptAllAddressKeys } from './keys';
+import { decryptAddressKey } from './keys';
 import { DecryptedShareContext, DecryptedNodeContext, User, Address } from '../types/crypto';
 import { Share, Link } from '../types/drive';
 import { deriveKeyPassphrase } from './key-password';
+import { logger } from '../utils/logger';
 
 /**
  * Drive-specific crypto operations
@@ -14,7 +15,7 @@ export class DriveCryptoService {
   private crypto: CryptoService;
   private userApi: UserApiClient;
   private userKeys: Map<string, openpgp.PrivateKey> = new Map(); // User keys (primary account keys)
-  private addressKeys: Map<string, openpgp.PrivateKey> = new Map(); // Address keys (email-specific keys)
+  private addressKeys: Map<string, openpgp.PrivateKey[]> = new Map(); // Address keys (all decrypted keys per address)
   private addresses: Map<string, Address> = new Map(); // Full address info by address ID
   private shareContexts: Map<string, DecryptedShareContext> = new Map();
   private nodeContexts: Map<string, DecryptedNodeContext> = new Map();
@@ -45,7 +46,7 @@ export class DriveCryptoService {
     const user = await this.userApi.getUser();
 
     // Decrypt user keys first (these are the primary account keys)
-    console.log(`Decrypting user keys for: ${user.Name}`);
+    logger.debug(`Decrypting user keys for: ${user.Name}`);
 
     for (const key of user.Keys) {
       try {
@@ -69,7 +70,7 @@ export class DriveCryptoService {
           throw new Error('No salt available and raw password failed');
         }
       } catch (error) {
-        console.warn(`Failed to decrypt user key: ${error}`);
+        logger.warn(`Failed to decrypt user key: ${error}`);
       }
     }
 
@@ -78,33 +79,49 @@ export class DriveCryptoService {
 
     // Decrypt address keys (these are encrypted with tokens from user keys)
     for (const address of addresses) {
+      const decryptedKeys: openpgp.PrivateKey[] = [];
+
       for (const key of address.Keys) {
         try {
-          let passphrase: string;
+          let passphrase: string | null = null;
 
           if (key.Token && this.userKeys.size > 0) {
-            // Address key is encrypted with a token that's encrypted with the user key
-            const userKey = Array.from(this.userKeys.values())[0]; // Get first user key
-            const decryptedToken = await this.crypto.decryptMessage(key.Token, userKey);
-            passphrase = decryptedToken;
+            // Address key is encrypted with a token that's encrypted with the user key.
+            // Try all user keys — the token may not be encrypted with the first one.
+            for (const userKey of this.userKeys.values()) {
+              try {
+                passphrase = await this.crypto.decryptMessage(key.Token!, userKey);
+                break;
+              } catch {
+                // Try next user key
+              }
+            }
+            if (!passphrase) {
+              // No user key could decrypt the token — try password fallback
+              const salt = saltMap.get(key.ID);
+              passphrase = salt
+                ? await deriveKeyPassphrase(normalizedPassword, salt)
+                : normalizedPassword;
+            }
           } else {
             // Fall back to password-based decryption
             const salt = saltMap.get(key.ID);
-            if (salt) {
-              passphrase = await deriveKeyPassphrase(normalizedPassword, salt);
-            } else {
-              passphrase = normalizedPassword;
-            }
+            passphrase = salt
+              ? await deriveKeyPassphrase(normalizedPassword, salt)
+              : normalizedPassword;
           }
 
           // Try to decrypt the key
           const decryptedKey = await this.decryptPrivateKeyWithPassphrase(key.PrivateKey, passphrase);
-          this.addressKeys.set(address.ID, decryptedKey);
-          this.addresses.set(address.ID, address); // Store full address info
-          break; // Successfully decrypted one key for this address
+          decryptedKeys.push(decryptedKey);
         } catch (error) {
-          console.warn(`Failed to decrypt address key: ${error}`);
+          logger.warn(`Failed to decrypt address key: ${error}`);
         }
+      }
+
+      if (decryptedKeys.length > 0) {
+        this.addressKeys.set(address.ID, decryptedKeys);
+        this.addresses.set(address.ID, address);
       }
     }
 
@@ -112,7 +129,7 @@ export class DriveCryptoService {
       throw new Error('Failed to decrypt any keys');
     }
 
-    console.log(`\n✓ Decrypted ${this.userKeys.size} user key(s) and ${this.addressKeys.size} address key(s)`);
+    logger.debug(`Decrypted ${this.userKeys.size} user key(s) and ${this.addressKeys.size} address key(s)`);
   }
 
   /**
@@ -131,14 +148,22 @@ export class DriveCryptoService {
   }
 
   /**
-   * Get a decrypted key by address ID
+   * Get the primary decrypted key for an address.
+   * Returns the first key (primary), but all keys are available via getKeysForAddress.
    */
   private getKeyForAddress(addressId: string): openpgp.PrivateKey {
-    const key = this.addressKeys.get(addressId);
-    if (!key) {
+    const keys = this.addressKeys.get(addressId);
+    if (!keys || keys.length === 0) {
       throw new Error(`No decrypted key found for address ${addressId}`);
     }
-    return key;
+    return keys[0];
+  }
+
+  /**
+   * Get all decrypted keys for an address (for trying multiple keys during decryption).
+   */
+  private getKeysForAddress(addressId: string): openpgp.PrivateKey[] {
+    return this.addressKeys.get(addressId) || [];
   }
 
   /**
@@ -151,10 +176,11 @@ export class DriveCryptoService {
       return userKeys[0];
     }
 
-    // Fall back to address keys
-    const addressKeys = Array.from(this.addressKeys.values());
-    if (addressKeys.length > 0) {
-      return addressKeys[0];
+    // Fall back to address keys (first key from first address)
+    for (const keys of this.addressKeys.values()) {
+      if (keys.length > 0) {
+        return keys[0];
+      }
     }
 
     throw new Error('No decrypted keys available');
@@ -171,13 +197,30 @@ export class DriveCryptoService {
       return this.shareContexts.get(share.ShareID)!;
     }
 
-    // Get address private key for decrypting the share passphrase
-    const addressKey = share.AddressID
-      ? this.getKeyForAddress(share.AddressID)
-      : this.getAnyPrivateKey();
+    // Get address keys for decrypting the share passphrase.
+    // Try all keys for the address — the passphrase may be encrypted with a non-primary key.
+    const keysToTry: openpgp.PrivateKey[] = share.AddressID
+      ? this.getKeysForAddress(share.AddressID)
+      : [this.getAnyPrivateKey()];
+
+    if (keysToTry.length === 0) {
+      throw new Error(`No decrypted keys for address ${share.AddressID}`);
+    }
 
     // Step 1: Decrypt the share passphrase (encrypted PGP message)
-    const sharePassphrase = await this.crypto.decryptMessage(share.Passphrase, addressKey);
+    let sharePassphrase: string | null = null;
+    let lastError: Error | null = null;
+    for (const key of keysToTry) {
+      try {
+        sharePassphrase = await this.crypto.decryptMessage(share.Passphrase, key);
+        break;
+      } catch (err) {
+        lastError = err as Error;
+      }
+    }
+    if (sharePassphrase === null) {
+      throw lastError || new Error('Failed to decrypt share passphrase');
+    }
 
     // Step 2: Decrypt the share's private key using the passphrase
     const sharePrivateKey = await this.decryptPrivateKeyWithPassphrase(
@@ -327,12 +370,21 @@ export class DriveCryptoService {
   }
 
   /**
-   * Get the primary address ID
+   * Get the primary address ID (lowest Order value = primary)
    * @returns Primary address ID
    */
   getPrimaryAddressId(): string | null {
-    const addressIds = Array.from(this.addressKeys.keys());
-    return addressIds.length > 0 ? addressIds[0] : null;
+    let bestId: string | null = null;
+    let bestOrder = Infinity;
+    for (const [id, address] of this.addresses.entries()) {
+      // Only consider addresses that have decrypted keys
+      if (!this.addressKeys.has(id)) continue;
+      if (address.Order < bestOrder) {
+        bestOrder = address.Order;
+        bestId = id;
+      }
+    }
+    return bestId;
   }
 
   /**
@@ -359,6 +411,21 @@ export class DriveCryptoService {
   }
 
   /**
+   * Get all address verification keys (email -> public key)
+   * Returns a Map of lowercase email to the primary public key for that address.
+   */
+  getAllAddressVerificationKeys(): Map<string, openpgp.PublicKey> {
+    const result = new Map<string, openpgp.PublicKey>();
+    for (const [id, keys] of this.addressKeys.entries()) {
+      if (keys.length === 0) continue;
+      const address = this.addresses.get(id);
+      if (!address) continue;
+      result.set(address.Email.toLowerCase(), keys[0].toPublic());
+    }
+    return result;
+  }
+
+  /**
    * Get the signing key for an address
    * @param addressId - Address ID (optional, uses primary if not specified)
    * @returns Signing key (private key)
@@ -376,6 +443,22 @@ export class DriveCryptoService {
    */
   getUserPrivateKey(): openpgp.PrivateKey {
     return this.getAnyPrivateKey();
+  }
+
+  /**
+   * Get the addresses map (address ID → Address)
+   * Needed by SDK AccountAdapter
+   */
+  getAddressesMap(): Map<string, Address> {
+    return this.addresses;
+  }
+
+  /**
+   * Get the address keys map (address ID → decrypted private keys)
+   * Needed by SDK AccountAdapter
+   */
+  getAddressKeysMap(): Map<string, import('@protontech/openpgp').PrivateKey[]> {
+    return this.addressKeys;
   }
 
   /**

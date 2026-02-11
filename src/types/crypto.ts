@@ -1,6 +1,7 @@
 /**
  * Type definitions for cryptographic operations
  */
+import type * as openpgp from '@protontech/openpgp';
 
 /**
  * User's cryptographic keys
@@ -65,7 +66,7 @@ export interface User {
  */
 export interface DecryptedShareContext {
   shareId: string;
-  shareKey: any; // Decrypted share private key (openpgp.PrivateKey)
+  shareKey: openpgp.PrivateKey;
   sharePassphrase: string; // Decrypted passphrase
 }
 
@@ -74,7 +75,7 @@ export interface DecryptedShareContext {
  */
 export interface DecryptedNodeContext {
   linkId: string;
-  nodeKey: any; // Decrypted node private key (openpgp.PrivateKey)
+  nodeKey: openpgp.PrivateKey;
   nodePassphrase: string; // Decrypted passphrase
 }
 
@@ -82,8 +83,8 @@ export interface DecryptedNodeContext {
  * Key pair for OpenPGP
  */
 export interface KeyPair {
-  privateKey: any; // OpenPGP.PrivateKey
-  publicKey: any; // OpenPGP.PublicKey
+  privateKey: openpgp.PrivateKey;
+  publicKey: openpgp.PublicKey;
 }
 
 /**

@@ -4,83 +4,53 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { AuthService } from '../auth';
 import { promptForToken } from '../auth/captcha-helper';
+import { CaptchaError } from '../errors/types';
+import { isAxiosError } from 'axios';
 import { handleError } from '../errors/handler';
 import { isVerbose, isQuiet, outputResult } from '../utils/output';
-
-/**
- * Read password from stdin (for piped input)
- * This allows: echo "password" | proton-drive login -u user@example.com --password-stdin
- */
-async function readPasswordFromStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    const timeout = setTimeout(() => {
-      reject(new Error('Timeout reading from stdin'));
-    }, 5000);
-
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk) => {
-      data += chunk;
-    });
-    process.stdin.on('end', () => {
-      clearTimeout(timeout);
-      // Remove all leading and trailing whitespace (newlines, spaces, tabs, etc.)
-      resolve(data.trim());
-    });
-    process.stdin.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-    process.stdin.resume();
-  });
-}
+import { readPasswordFromStdin, resolveCredentials } from '../utils/password';
 
 /**
  * Create the login command for the CLI
  * Handles user authentication with Proton Drive
  *
  * Credential sources (in priority order):
- * 1. Environment variables: PROTON_USERNAME and PROTON_PASSWORD
- * 2. Command line options: -u/--username and -p/--password
- * 3. Stdin for password: --password-stdin flag
+ * 1. --credential-provider git (resolves both username + password via git credential)
+ * 2. --password-stdin (piped password — safe from `ps` and /proc leaks)
+ * 3. -u/--username flag (username only — not sensitive)
  * 4. Interactive prompts (if TTY is available)
  *
- * For passwords with special characters, use environment variables or --password-stdin
- * to avoid shell escaping issues.
+ * Passwords are NEVER accepted via CLI flags or environment variables.
  */
 export function createLoginCommand(): Command {
   const command = new Command('login');
 
   command
     .description('Authenticate with Proton Drive')
-    .option('-u, --username <email>', 'Proton account email (or set PROTON_USERNAME env var)')
-    .option('-p, --password <password>', 'Proton account password (or set PROTON_PASSWORD env var)')
+    .option('-u, --username <email>', 'Proton account email')
     .option('--password-stdin', 'Read password from stdin (for scripts with special characters)')
+    .option('--credential-provider <type>', 'Credential provider: git (use git credential manager)')
     .action(async (options) => {
       try {
-        // Priority 1: Environment variables (best for automation with special characters)
-        // Priority 2: Command line options
-        // Priority 3: Stdin for password (--password-stdin)
-        // Priority 4: Interactive prompt
-        let username = process.env.PROTON_USERNAME || options.username;
-        let password = process.env.PROTON_PASSWORD || options.password;
+        let username = options.username;
+        let password: string | undefined;
 
-        // Handle --password-stdin flag
-        if (options.passwordStdin && !password) {
-          if (process.stdin.isTTY) {
-            console.error(chalk.red('Error: --password-stdin requires piped input'));
-            console.error(chalk.dim('Example: echo "your-password" | proton-drive login -u user@example.com --password-stdin'));
-            process.exit(1);
+        // Handle --credential-provider git (resolves both username + password)
+        if (options.credentialProvider === 'git') {
+          const creds = await resolveCredentials({ credentialProvider: 'git' });
+          username = creds.username || username;
+          password = creds.password;
+          if (!isQuiet()) {
+            console.log(chalk.dim(`[INFO] Credentials resolved via git credential helper for ${username}`));
           }
+        }
+
+        // Handle --password-stdin flag or detect piped stdin
+        if (!password && (options.passwordStdin || !process.stdin.isTTY)) {
           try {
             password = await readPasswordFromStdin();
-            if (!password) {
-              console.error(chalk.red('Error: No password received from stdin'));
-              process.exit(1);
-            }
-            // Always show password info when using --password-stdin to help with debugging
             if (!isQuiet()) {
-              console.log(chalk.dim(`[INFO] Password read from stdin: length=${password.length} characters`));
+              console.log(chalk.dim('[INFO] Password read from stdin'));
             }
           } catch (err) {
             console.error(chalk.red('Error reading password from stdin:'), err);
@@ -94,15 +64,15 @@ export function createLoginCommand(): Command {
             // Non-interactive mode - can't prompt
             if (!username) {
               console.error(chalk.red('Error: Username required.'));
-              console.error(chalk.dim('Set PROTON_USERNAME environment variable or use -u flag.'));
+              console.error(chalk.dim('Use -u flag or run interactively.'));
             }
             if (!password) {
               console.error(chalk.red('Error: Password required.'));
-              console.error(chalk.dim('Set PROTON_PASSWORD environment variable, use -p flag, or use --password-stdin.'));
+              console.error(chalk.dim('Use --password-stdin or run interactively.'));
             }
-            console.error(chalk.dim('\nFor passwords with special characters, use:'));
-            console.error(chalk.dim('  PROTON_PASSWORD="your:complex\\password" proton-drive login -u user@example.com'));
-            console.error(chalk.dim('  echo "your:complex\\password" | proton-drive login -u user@example.com --password-stdin'));
+            console.error(chalk.dim('\nExamples:'));
+            console.error(chalk.dim('  echo "password" | proton-drive login -u user@example.com --password-stdin'));
+            console.error(chalk.dim('  proton-drive login   # interactive prompts'));
             process.exit(1);
           }
 
@@ -138,6 +108,10 @@ export function createLoginCommand(): Command {
           password = password || answers.password;
         }
 
+        // At this point both username and password are guaranteed defined
+        const finalUsername = username as string;
+        const finalPassword = password as string;
+
         // Authenticate with spinner
         let spinner;
         if (isVerbose()) {
@@ -146,29 +120,29 @@ export function createLoginCommand(): Command {
         const authService = new AuthService();
 
         try {
-          await authService.login(username.trim(), password);
+          await authService.login(finalUsername.trim(), finalPassword);
           if (spinner) {
             spinner.succeed(chalk.green('Login successful!'));
           }
           if (isVerbose()) {
-            console.log(chalk.dim('Session saved to ~/.proton-drive-cli/session.json'));
+            console.log(chalk.dim('Session saved (tokens only — password is not stored on disk).'));
             console.log('\nYou can now use the CLI to upload files to Proton Drive.');
           } else if (!isQuiet()) {
             outputResult('OK');
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (spinner) {
             spinner.stop();
           }
 
           // Check if CAPTCHA is required
-          if (error.requiresCaptcha) {
+          if (error instanceof CaptchaError) {
             console.log(chalk.yellow('\n⚠️  CAPTCHA verification required'));
 
             // Use the CAPTCHA helper to get the token
             const verificationToken = await promptForToken(
               error.captchaUrl,
-              error.captchaToken || ''
+              error.captchaToken
             );
 
             if (!verificationToken) {
@@ -180,14 +154,14 @@ export function createLoginCommand(): Command {
             if (verificationToken === 'RETRY_WITHOUT_TOKEN') {
               const retrySpinner = ora('Retrying authentication (IP may be allowlisted now)...').start();
               try {
-                await authService.login(username.trim(), password);
+                await authService.login(finalUsername.trim(), finalPassword);
                 retrySpinner.succeed(chalk.green('Login successful!'));
-                console.log(chalk.dim('Session saved to ~/.proton-drive-cli/session.json'));
+                console.log(chalk.dim('Session saved (tokens only). Use --password-stdin with subsequent commands.'));
                 console.log('\nYou can now use the CLI to upload files to Proton Drive.');
                 return;
-              } catch (retryError: any) {
+              } catch (retryError: unknown) {
                 retrySpinner.fail();
-                if (retryError.requiresCaptcha) {
+                if (retryError instanceof CaptchaError) {
                   console.error(chalk.red('\n✗ Still getting CAPTCHA challenge.'));
                   console.error('The IP allowlisting may not have worked.');
                   console.error('Try the manual token extraction method instead.');
@@ -199,20 +173,20 @@ export function createLoginCommand(): Command {
             // Retry login with the verification token
             const verifySpinner = ora('Retrying authentication with verification token...').start();
             try {
-              await authService.login(username.trim(), password, verificationToken);
+              await authService.login(finalUsername.trim(), finalPassword, verificationToken);
               verifySpinner.succeed(chalk.green('Login successful!'));
-              console.log(chalk.dim('Session saved to ~/.proton-drive-cli/session.json'));
+              console.log(chalk.dim('Session saved (tokens only). Use --password-stdin with subsequent commands.'));
               console.log('\nYou can now use the CLI to upload files to Proton Drive.');
-            } catch (retryError: any) {
+            } catch (retryError: unknown) {
               verifySpinner.fail();
-              if (retryError.requiresCaptcha) {
+              if (retryError instanceof CaptchaError) {
                 console.error(chalk.yellow('\n⚠️  Still getting CAPTCHA challenge'));
                 console.error('The token may be invalid or expired.');
                 console.error(chalk.dim('\nTry the alternative approach:'));
                 console.error('  1. Log in at https://account.proton.me in your browser');
                 console.error('  2. Complete any CAPTCHA there');
                 console.error('  3. Then try this CLI login again');
-              } else if (retryError.response?.data?.Code === 12087) {
+              } else if (isAxiosError(retryError) && (retryError.response?.data as Record<string, unknown>)?.Code === 12087) {
                 console.error(chalk.yellow('\n⚠️  CAPTCHA validation failed (code 12087)'));
                 console.error('The token was not accepted by the server.');
                 console.error(chalk.dim('\nThis can happen if:'));

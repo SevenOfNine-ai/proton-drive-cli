@@ -1,5 +1,6 @@
-import * as openpgp from 'openpgp';
-import { User, Address, AddressKey, UserKey, KeyPair } from '../types/crypto';
+import * as openpgp from '@protontech/openpgp';
+import { Address, AddressKey } from '../types/crypto';
+import { logger } from '../utils/logger';
 
 /**
  * Decrypt a private key with a passphrase
@@ -28,29 +29,6 @@ export function getPrimaryAddressKey(addresses: Address[]): AddressKey | null {
     }
   }
   return null;
-}
-
-/**
- * Get primary user key
- */
-export function getPrimaryUserKey(user: User): UserKey | null {
-  const primaryKey = user.Keys.find(key => key.Primary === 1);
-  return primaryKey || null;
-}
-
-/**
- * Decrypt user's primary private key
- */
-export async function decryptUserKey(
-  user: User,
-  mailboxPassword: string
-): Promise<openpgp.PrivateKey> {
-  const primaryKey = getPrimaryUserKey(user);
-  if (!primaryKey) {
-    throw new Error('No primary user key found');
-  }
-
-  return decryptPrivateKey(primaryKey.PrivateKey, mailboxPassword);
 }
 
 /**
@@ -84,7 +62,7 @@ export async function decryptAllAddressKeys(
         keys.push(decryptedKey);
       } catch (error) {
         // Skip keys that can't be decrypted
-        console.warn(`Failed to decrypt key ${key.ID}: ${error}`);
+        logger.warn(`Failed to decrypt key ${key.ID}: ${error instanceof Error ? error.message : error}`);
       }
     }
   }
@@ -92,16 +70,3 @@ export async function decryptAllAddressKeys(
   return keys;
 }
 
-/**
- * Read public key from armored string
- */
-export async function readPublicKey(armoredKey: string): Promise<openpgp.PublicKey> {
-  return openpgp.readKey({ armoredKey });
-}
-
-/**
- * Read private key from armored string
- */
-export async function readPrivateKey(armoredKey: string): Promise<openpgp.PrivateKey> {
-  return openpgp.readPrivateKey({ armoredKey });
-}

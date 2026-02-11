@@ -2,11 +2,32 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
 import Table from 'cli-table3';
-import { createDriveClient } from '../drive';
-import { Node } from '../types/drive';
-import { formatSize, formatDate, getNodeIcon } from '../drive/utils';
+import { NodeType } from '@protontech/drive-sdk';
+import { createSDKClient } from '../sdk/client';
+import { resolvePathToNodeUid } from '../sdk/pathResolver';
 import { handleError } from '../errors/handler';
 import { isVerbose, isQuiet, outputResult } from '../utils/output';
+import { resolvePassword } from '../utils/password';
+
+function formatSize(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  return `${size.toFixed(2)} ${units[unitIndex]}`;
+}
+
+function formatDate(timestamp: number | Date): string {
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp * 1000);
+  return date.toLocaleString();
+}
+
+function getNodeIcon(type: string): string {
+  return type === NodeType.Folder ? '📁' : '📄';
+}
 
 /**
  * Create the ls command
@@ -18,76 +39,65 @@ export function createLsCommand(): Command {
     .description('List files and folders in your Proton Drive')
     .argument('[path]', 'Path to list (defaults to root "/")', '/')
     .option('-l, --long', 'Use long listing format with details')
+    .option('--password-stdin', 'Read password for key decryption from stdin')
+    .option('--credential-provider <type>', 'Credential provider: git (use git credential manager)')
     .action(async (path: string, options) => {
       try {
-        // Create and initialize drive client
+        // Resolve password for key decryption
+        const password = await resolvePassword(options);
+
+        // Create and initialize SDK client
         let spinner;
         if (isVerbose()) {
           spinner = ora('Loading folder contents...').start();
         }
-        const client = createDriveClient();
-        await client.initializeFromSession();
+        const client = await createSDKClient(password);
 
-        // Resolve path - this returns the folder with its decrypted context
-        const resolved = await client.paths().resolvePath(path);
+        // Resolve path to UID
+        const folderUid = await resolvePathToNodeUid(client, path);
 
-        // List children links
-        const links = await client.nodes().listFolderChildrenLinks(
-          resolved.identity.shareId,
-          resolved.identity.linkId
-        );
+        // Collect children
+        const nodes: Array<{
+          name: string;
+          type: string;
+          size: number;
+          modifyTime: Date;
+        }> = [];
+
+        for await (const child of client.iterateFolderChildren(folderUid)) {
+          if (child.ok) {
+            nodes.push({
+              name: child.value.name,
+              type: child.value.type,
+              size: child.value.totalStorageSize || 0,
+              modifyTime: child.value.modificationTime,
+            });
+          }
+        }
 
         if (spinner) {
           spinner.stop();
         }
 
-        if (links.length === 0) {
+        if (nodes.length === 0) {
           if (isVerbose()) {
             console.log(chalk.yellow('\nFolder is empty.'));
           }
           return;
         }
 
-        // Decrypt names and create nodes
-        const nodes: Array<{ node: Node; decryptedName: string }> = [];
-        for (const link of links) {
-          try {
-            const decryptedName = await client.nodes().decryptNodeName(link, resolved.folderContext);
-            const node: Node = {
-              linkId: link.LinkID,
-              parentLinkId: link.ParentLinkID,
-              type: link.Type,
-              name: decryptedName,
-              nameSignatureEmail: link.NameSignatureEmail,
-              hash: link.Hash,
-              state: link.State,
-              mimeType: link.MIMEType,
-              size: link.Size,
-              createTime: link.CreateTime,
-              modifyTime: link.ModifyTime,
-              activeRevisionId: link.FileProperties?.ActiveRevision?.ID,
-              nodeHashKey: link.FolderProperties?.NodeHashKey,
-            };
-            nodes.push({ node, decryptedName });
-          } catch (error) {
-            console.warn(chalk.yellow(`Failed to decrypt link ${link.LinkID}: ${error}`));
-          }
-        }
-
         // Sort: folders first, then alphabetically
         nodes.sort((a, b) => {
-          if (a.node.type !== b.node.type) {
-            return a.node.type - b.node.type; // Folders (1) before files (2)
+          if (a.type !== b.type) {
+            return a.type === NodeType.Folder ? -1 : 1;
           }
-          return a.decryptedName.localeCompare(b.decryptedName);
+          return a.name.localeCompare(b.name);
         });
 
         if (isVerbose()) {
-          // Verbose mode: Show detailed output with colors
           console.log(chalk.bold(`\nListing: ${path}\n`));
 
           if (options.long) {
-            // Long format with details using cli-table3
             const table = new Table({
               head: [
                 chalk.cyan('Type'),
@@ -95,38 +105,33 @@ export function createLsCommand(): Command {
                 chalk.cyan('Size'),
                 chalk.cyan('Modified'),
               ],
-              style: {
-                head: [],
-                border: ['dim'],
-              },
+              style: { head: [], border: ['dim'] },
               colWidths: [6, 40, 12, 26],
             });
 
-            for (const { node, decryptedName } of nodes) {
-              const icon = getNodeIcon(node);
-              const name = node.type === 1 ? chalk.blue(decryptedName) : decryptedName;
-              const size = node.type === 2 ? formatSize(node.size) : chalk.dim('-');
+            for (const node of nodes) {
+              const icon = getNodeIcon(node.type);
+              const name = node.type === NodeType.Folder ? chalk.blue(node.name) : node.name;
+              const size = node.type !== NodeType.Folder ? formatSize(node.size) : chalk.dim('-');
               const date = formatDate(node.modifyTime);
               table.push([icon, name, size, date]);
             }
 
             console.log(table.toString());
           } else {
-            // Simple format with icons
-            for (const { node, decryptedName } of nodes) {
-              const icon = getNodeIcon(node);
-              const name = node.type === 1 ? chalk.blue(decryptedName) : decryptedName;
+            for (const node of nodes) {
+              const icon = getNodeIcon(node.type);
+              const name = node.type === NodeType.Folder ? chalk.blue(node.name) : node.name;
               console.log(`${icon}  ${name}`);
             }
           }
 
-          const folders = nodes.filter((n) => n.node.type === 1).length;
-          const files = nodes.filter((n) => n.node.type === 2).length;
+          const folders = nodes.filter((n) => n.type === NodeType.Folder).length;
+          const files = nodes.filter((n) => n.type !== NodeType.Folder).length;
           console.log(chalk.dim(`\nTotal: ${nodes.length} items (${folders} folders, ${files} files)`));
         } else if (!isQuiet()) {
-          // Normal mode: Just output filenames (one per line, for scripting)
-          for (const { decryptedName } of nodes) {
-            outputResult(decryptedName);
+          for (const node of nodes) {
+            outputResult(node.name);
           }
         }
       } catch (error) {

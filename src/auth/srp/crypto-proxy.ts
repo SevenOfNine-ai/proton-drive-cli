@@ -3,7 +3,7 @@
  * Provides a simplified interface similar to ProtonMail's CryptoProxy
  */
 
-import * as openpgp from 'openpgp';
+import * as openpgp from '@protontech/openpgp';
 import { createHash } from 'crypto';
 import './uint8array-extensions';
 

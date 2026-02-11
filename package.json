@@ -1,25 +1,40 @@
 {
-  "name": "proton-drive-cli",
+  "name": "@sevenofnine-ai/proton-drive-cli",
   "version": "0.1.0",
   "main": "dist/index.js",
-  "description": "Command-line interface for Proton Drive with end-to-end encrypted file operations",
+  "types": "dist/index.d.ts",
+  "description": "End-to-end encrypted CLI for Proton Drive with Git LFS bridge support",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge/index.d.ts",
+      "default": "./dist/bridge/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
     "lint": "tsc --noEmit",
     "watch": "tsc --watch",
-    "install-global": "npm run build && npm link",
-    "uninstall-global": "npm unlink -g proton-drive-cli",
-    "prepare": "npm run build",
-    "package": "npm run build && npm pack"
+    "install-global": "yarn build && yarn link",
+    "uninstall-global": "yarn unlink",
+    "prepack": "find node_modules/@protontech/drive-sdk/src -type f -delete 2>/dev/null; find node_modules/@protontech/drive-sdk/dist -name '*.test.*' -delete 2>/dev/null; true",
+    "prepublishOnly": "yarn build",
+    "package": "yarn build && npm pack"
   },
   "bin": {
     "proton-drive": "./dist/index.js"
   },
   "files": [
     "dist/**/*",
+    "!dist/**/*.test.*",
     "README.md",
     "LICENSE"
   ],
@@ -30,10 +45,27 @@
     "upload",
     "download",
     "encryption",
-    "e2ee"
+    "e2ee",
+    "git-lfs"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SevenOfNine-ai/proton-git-lfs.git",
+    "directory": "submodules/proton-drive-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/SevenOfNine-ai/proton-git-lfs/issues"
+  },
+  "homepage": "https://github.com/SevenOfNine-ai/proton-git-lfs/tree/main/submodules/proton-drive-cli#readme",
+  "bundledDependencies": [
+    "@protontech/drive-sdk"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Proton Drive CLI Contributors",
   "license": "MIT",
+  "packageManager": "yarn@4.1.1",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -43,30 +75,29 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/fs-extra": "^11.0.4",
     "@types/inquirer": "^9.0.9",
+    "@types/jest": "^29.5.14",
     "@types/jwt-decode": "^2.2.1",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^24.10.1",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1",
+    "@protontech/drive-sdk": "file:./submodules/sdk/js/sdk",
     "@protontech/openpgp": "^6.2.2",
-    "@protontech/pmcrypto": "^8.8.1",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "boxen": "^7.1.1",
     "chalk": "^5.6.2",
-    "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.2",
-    "dotenv": "^17.2.3",
     "fs-extra": "^11.3.2",
     "inquirer": "^8.2.7",
     "jwt-decode": "^4.0.0",
     "mime-types": "^3.0.2",
-    "ora": "^9.0.0",
-    "p-limit": "^7.2.0",
-    "p-retry": "^7.1.0"
+    "openpgp": "npm:@protontech/openpgp@^6.2.2",
+    "ora": "^9.0.0"
   }
 }

@@ -1,4 +1,4 @@
-import * as openpgp from 'openpgp';
+import * as openpgp from '@protontech/openpgp';
 import { DecryptionResult, EncryptionResult } from '../types/crypto';
 
 /**
@@ -36,7 +36,7 @@ export class CryptoService {
     const message = await openpgp.readMessage({ armoredMessage });
     const { data } = await openpgp.decrypt({
       message,
-      passwords: [passphrase as any],
+      passwords: [passphrase as string],
     });
     return data as string;
   }
@@ -50,12 +50,15 @@ export class CryptoService {
   async extractSessionKey(
     armoredMessage: string,
     privateKey: openpgp.PrivateKey
-  ): Promise<any> {
+  ): Promise<openpgp.DecryptedSessionKey> {
     const message = await openpgp.readMessage({ armoredMessage });
     const sessionKeys = await openpgp.decryptSessionKeys({
       message,
       decryptionKeys: privateKey,
     });
+    if (!sessionKeys || sessionKeys.length === 0) {
+      throw new Error('Failed to extract session key: no session keys found in message');
+    }
     return sessionKeys[0];
   }
 
@@ -67,12 +70,12 @@ export class CryptoService {
    */
   async decryptWithSessionKey(
     armoredMessage: string,
-    sessionKey: any
+    sessionKey: openpgp.DecryptedSessionKey
   ): Promise<Uint8Array> {
     const message = await openpgp.readMessage({ armoredMessage });
     const { data } = await openpgp.decrypt({
       message,
-      sessionKeys: sessionKey,
+      sessionKeys: sessionKey as openpgp.SessionKey,
       format: 'binary'
     });
     return data as Uint8Array;
@@ -109,7 +112,7 @@ export class CryptoService {
     const message = await openpgp.createMessage({ text: data });
     const encrypted = await openpgp.encrypt({
       message,
-      passwords: [passphrase as any],
+      passwords: [passphrase as string],
     });
     return encrypted as string;
   }
@@ -253,19 +256,22 @@ export class CryptoService {
   ): Promise<{ data: Uint8Array; signature: string }> {
     // Create binary message (convert to Buffer for compatibility)
     const buffer = Buffer.from(data);
-    const message = await openpgp.createMessage({ binary: buffer });
+    const encryptMessage = await openpgp.createMessage({ binary: buffer });
 
     // Encrypt with session key and sign
     const encrypted = await openpgp.encrypt({
-      message,
+      message: encryptMessage,
       sessionKey: sessionKey,
       signingKeys: signingKey,
       format: 'binary',
     }) as Uint8Array;
 
-    // Generate detached signature
+    // Generate detached signature with a fresh message object.
+    // OpenPGP.js message objects may be consumed by streaming operations,
+    // so reusing the same object for both encrypt and sign is unsafe.
+    const signMessage = await openpgp.createMessage({ binary: Buffer.from(data) });
     const signature = await openpgp.sign({
-      message,
+      message: signMessage,
       signingKeys: signingKey,
       detached: true,
     }) as string;

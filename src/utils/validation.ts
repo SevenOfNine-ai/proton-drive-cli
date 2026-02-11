@@ -28,31 +28,6 @@ export async function validateFilePath(filePath: string): Promise<void> {
 }
 
 /**
- * Validate destination path format
- */
-export function validateDestinationPath(destination: string): void {
-  if (!destination.startsWith('/') && destination !== '') {
-    throw new AppError(
-      'Destination path must start with / or be empty for root',
-      ErrorCode.INVALID_PATH,
-      { path: destination },
-      false
-    );
-  }
-
-  // Check for invalid characters
-  const invalid = /[<>:"|?*\x00-\x1F]/.test(destination);
-  if (invalid) {
-    throw new AppError(
-      'Destination path contains invalid characters',
-      ErrorCode.INVALID_PATH,
-      { path: destination },
-      false
-    );
-  }
-}
-
-/**
  * Validate file size
  */
 export function validateFileSize(
@@ -79,10 +54,3 @@ export function validateFileSize(
   }
 }
 
-/**
- * Validate email format
- */
-export function validateEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}

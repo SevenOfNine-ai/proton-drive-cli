@@ -2,6 +2,9 @@ import { AuthApiClient } from '../api/auth';
 import { SRPClient } from './srp';
 import { SessionManager } from './session';
 import { SessionCredentials } from '../types/auth';
+import { CaptchaError } from '../errors/types';
+import { jwtDecode } from 'jwt-decode';
+import { logger } from '../utils/logger';
 
 /**
  * Main authentication service
@@ -54,7 +57,7 @@ export class AuthService {
         throw new Error('Server authentication failed: invalid server proof');
       }
 
-      // Step 5: Create session credentials
+      // Step 5: Create session credentials (password is NOT stored — flows via stdin)
       const session: SessionCredentials = {
         sessionId: authResponse.UID,
         uid: authResponse.UID,
@@ -62,19 +65,17 @@ export class AuthService {
         refreshToken: authResponse.RefreshToken,
         scopes: authResponse.Scopes,
         passwordMode: authResponse.PasswordMode,
-        mailboxPassword: password, // Store for crypto operations
       };
 
       // Step 6: Save session
       await SessionManager.saveSession(session);
-      console.log('✓ Authentication successful');
-      console.log(`Session saved to: ${SessionManager.getSessionFilePath()}`);
+      logger.info('Authentication successful');
+      logger.debug(`Session saved (tokens only) to: ${SessionManager.getSessionFilePath()}`);
 
       return session;
-    } catch (error: any) {
-      // Preserve CAPTCHA error properties
-      if (error.requiresCaptcha) {
-        throw error; // Pass through CAPTCHA errors unchanged
+    } catch (error: unknown) {
+      if (error instanceof CaptchaError) {
+        throw error;
       }
 
       if (error instanceof Error) {
@@ -89,15 +90,30 @@ export class AuthService {
    * @returns Current session credentials
    */
   async getSession(): Promise<SessionCredentials> {
-    // Try to load existing session
     const existingSession = await SessionManager.loadSession();
-    if (existingSession) {
-      // TODO: Check if token needs refresh
-      // For now, we assume the token is still valid
-      return existingSession;
+    if (!existingSession) {
+      throw new Error('No valid session found. Please login first using: proton-drive login');
     }
 
-    throw new Error('No valid session found. Please login first using: proton-drive login');
+    if (this.isTokenExpiringSoon(existingSession.accessToken)) {
+      return await this.refreshSession();
+    }
+
+    return existingSession;
+  }
+
+  /**
+   * Check if a JWT token is expiring soon (within 5 minutes)
+   */
+  private isTokenExpiringSoon(token: string): boolean {
+    try {
+      const decoded = jwtDecode<{ exp: number }>(token);
+      if (!decoded.exp) return false;
+      const now = Math.floor(Date.now() / 1000);
+      return (decoded.exp - now) < 5 * 60;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -132,7 +148,7 @@ export class AuthService {
       };
 
       await SessionManager.saveSession(updatedSession);
-      console.log('✓ Access token refreshed');
+      logger.info('Access token refreshed');
 
       return updatedSession;
     } catch (error) {
@@ -155,13 +171,13 @@ export class AuthService {
           await this.authApi.logout(session.accessToken);
         } catch (error) {
           // Ignore errors from server (session might be already invalid)
-          console.warn('Could not revoke session on server (this is normal if token is expired)');
+          logger.warn('Could not revoke session on server (this is normal if token is expired)');
         }
       }
 
       // Clear local session
       await SessionManager.clearSession();
-      console.log('✓ Logged out successfully');
+      logger.info('Logged out successfully');
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Logout failed: ${error.message}`);

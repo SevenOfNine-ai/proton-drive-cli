@@ -1,0 +1,10 @@
+{
+  "title": "Proton Drive CLI",
+  "description": "End-to-end encrypted CLI for Proton Drive with Git LFS bridge support",
+  "plugins": ["-sharing", "-search"],
+  "pluginsConfig": {},
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  }
+}

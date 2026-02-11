@@ -17,7 +17,7 @@ export interface AuthResponse {
   PasswordMode: number;      // 1 = single password, 2 = two password
   '2FA': {
     Enabled: number;
-    FIDO2: { RegisteredKeys: any[] };
+    FIDO2: { RegisteredKeys: Array<{ keyHandle: string; publicKey: string }> };
     TOTP: number;
   };
 }
@@ -29,7 +29,8 @@ export interface SessionCredentials {
   refreshToken: string;
   scopes: string[];
   passwordMode: number;
-  mailboxPassword?: string; // Stored for crypto operations (encrypted storage recommended in production)
+  // mailboxPassword is intentionally NOT persisted — it flows via stdin
+  // from pass-cli on every invocation and stays in memory only.
 }
 
 export interface SRPHandshake {
