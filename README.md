@@ -130,7 +130,7 @@ When docs disagree, runtime behavior and tests win.
 ## Testing
 
 ```bash
-yarn test                        # Run all 438 tests across 27 suites
+yarn test                        # Run all tests (fully mocked)
 yarn test --no-cache             # Without cache
 npx jest src/sdk/                # SDK adapter tests only
 npx jest src/cli/e2e.test        # E2E CLI tests

@@ -39,7 +39,7 @@ Requires Node.js >= 18 and Yarn 4 (via Corepack).
 corepack enable
 yarn install
 yarn build          # TypeScript compilation
-yarn test           # Run all 438 tests (fully mocked)
+yarn test           # Run all tests (fully mocked)
 yarn test:coverage  # With coverage report
 ```
 

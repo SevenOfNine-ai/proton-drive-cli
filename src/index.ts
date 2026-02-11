@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { program } from 'commander';
 import chalk from 'chalk';
+import { version as pkgVersion } from '../package.json';
 import { createLoginCommand, createLogoutCommand, createStatusCommand } from './cli/login';
 import { createLsCommand } from './cli/ls';
 import { createUploadCommand } from './cli/upload';
@@ -50,7 +51,7 @@ program
     chalk.blue.bold('Proton Drive CLI') +
     '\n\nUpload and manage files in Proton Drive from the command line.'
   )
-  .version('0.1.0', '-v, --version', 'Display version')
+  .version(pkgVersion, '-v, --version', 'Display version')
   .option('-d, --debug', 'Enable debug output')
   .option('--verbose', 'Show detailed output (default is minimal for scripting)')
   .option('-q, --quiet', 'Suppress all non-error output')

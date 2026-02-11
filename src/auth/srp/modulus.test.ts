@@ -1,5 +1,5 @@
 import './uint8array-extensions';
-import * as openpgp from 'openpgp';
+import * as openpgp from '@protontech/openpgp';
 import { verifyModulus, verifyAndGetModulus } from './modulus';
 import { CryptoProxy } from './crypto-proxy';
 import { SRP_MODULUS_KEY } from './constants';

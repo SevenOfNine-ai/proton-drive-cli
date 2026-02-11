@@ -184,7 +184,7 @@ export class HTTPClientAdapter implements ProtonDriveHTTPClient {
     };
 
     if (request.body) {
-      fetchOpts.body = request.body as any;
+      fetchOpts.body = request.body as NonNullable<RequestInit['body']>;
     }
 
     return this.fetchWithRefresh(url, fetchOpts, request.headers, request.timeoutMs, request.signal);

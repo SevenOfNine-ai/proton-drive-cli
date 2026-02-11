@@ -36,7 +36,7 @@ export class CryptoService {
     const message = await openpgp.readMessage({ armoredMessage });
     const { data } = await openpgp.decrypt({
       message,
-      passwords: [passphrase as any],
+      passwords: [passphrase as string],
     });
     return data as string;
   }
@@ -112,7 +112,7 @@ export class CryptoService {
     const message = await openpgp.createMessage({ text: data });
     const encrypted = await openpgp.encrypt({
       message,
-      passwords: [passphrase as any],
+      passwords: [passphrase as string],
     });
     return encrypted as string;
   }

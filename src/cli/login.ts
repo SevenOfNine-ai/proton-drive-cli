@@ -5,6 +5,7 @@ import ora from 'ora';
 import { AuthService } from '../auth';
 import { promptForToken } from '../auth/captcha-helper';
 import { CaptchaError } from '../errors/types';
+import { isAxiosError } from 'axios';
 import { handleError } from '../errors/handler';
 import { isVerbose, isQuiet, outputResult } from '../utils/output';
 import { readPasswordFromStdin, resolveCredentials } from '../utils/password';
@@ -185,7 +186,7 @@ export function createLoginCommand(): Command {
                 console.error('  1. Log in at https://account.proton.me in your browser');
                 console.error('  2. Complete any CAPTCHA there');
                 console.error('  3. Then try this CLI login again');
-              } else if ((retryError as any)?.response?.data?.Code === 12087) {
+              } else if (isAxiosError(retryError) && (retryError.response?.data as Record<string, unknown>)?.Code === 12087) {
                 console.error(chalk.yellow('\n⚠️  CAPTCHA validation failed (code 12087)'));
                 console.error('The token was not accepted by the server.');
                 console.error(chalk.dim('\nThis can happen if:'));

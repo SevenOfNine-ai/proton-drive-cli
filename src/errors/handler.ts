@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { AppError, ErrorCode } from './types';
-import { AxiosError } from 'axios';
+import { AxiosError, isAxiosError } from 'axios';
 
 /**
  * Map Axios/HTTP errors to app errors
@@ -33,7 +33,7 @@ export function mapHttpError(error: AxiosError): AppError {
   }
 
   const statusCode = error.response.status;
-  const responseData = error.response.data as any;
+  const responseData = error.response.data as Record<string, unknown>;
 
   // Map HTTP status codes
   if (statusCode === 401) {
@@ -183,8 +183,8 @@ export function toAppError(error: unknown): AppError {
   }
 
   // Axios HTTP error
-  if ((error as any).isAxiosError) {
-    return mapHttpError(error as AxiosError);
+  if (isAxiosError(error)) {
+    return mapHttpError(error);
   }
 
   // Node.js system error

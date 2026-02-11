@@ -27,13 +27,18 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Enable Corepack
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare yarn@4.1.1 --activate
 
       - name: Build vendored SDK
         run: cd submodules/sdk/js/sdk && npm install && npm run build
 
       - name: Install dependencies
-        run: yarn install
+        run: YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
+
+      - name: Typecheck
+        run: yarn lint
 
       - name: Build
         run: yarn build

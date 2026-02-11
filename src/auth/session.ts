@@ -26,7 +26,7 @@ export class SessionManager {
 
       // Strip mailboxPassword — passwords are never persisted to disk.
       // The password flows via stdin on every bridge invocation (from pass-cli).
-      const { mailboxPassword, ...safeSession } = session as any;
+      const { mailboxPassword, ...safeSession } = session as SessionCredentials & { mailboxPassword?: string };
 
       // Write atomically: unique temp file with restrictive mode, then rename.
       // Unique suffix prevents corruption from concurrent saveSession calls.

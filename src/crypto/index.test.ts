@@ -1,4 +1,4 @@
-import * as openpgp from 'openpgp';
+import * as openpgp from '@protontech/openpgp';
 import { CryptoService, cryptoService } from './index';
 
 // Shared test key pair — generated once per suite for speed
