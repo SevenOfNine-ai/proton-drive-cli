@@ -74,11 +74,19 @@ describe('UserApiClient', () => {
   });
 
   describe('response interceptor', () => {
-    test('throws session expired on 401', async () => {
+    test('throws session expired on 401 when refresh fails', async () => {
       new UserApiClient();
       captureInterceptors();
+      // Return null session so refresh cannot proceed
+      mockedSessionManager.loadSession.mockResolvedValue(null);
 
-      const error = { response: { status: 401, data: {} } };
+      const error = {
+        response: {
+          status: 401,
+          data: {},
+          config: { headers: {}, _retried: false },
+        },
+      };
       await expect(responseInterceptorReject(error)).rejects.toThrow(
         'Session expired'
       );
@@ -92,6 +100,7 @@ describe('UserApiClient', () => {
         response: {
           status: 422,
           data: { Code: 2000, Error: 'Something went wrong' },
+          config: { headers: {} },
         },
       };
       await expect(responseInterceptorReject(error)).rejects.toThrow(

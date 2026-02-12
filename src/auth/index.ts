@@ -192,8 +192,9 @@ export class AuthService {
         }
       }
 
-      // Clear local session
+      // Clear local session and crypto cache
       await SessionManager.clearSession();
+      await SessionManager.clearCryptoCache();
       logger.info('Logged out successfully');
     } catch (error) {
       if (error instanceof Error) {
