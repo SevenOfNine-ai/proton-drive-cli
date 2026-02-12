@@ -7,6 +7,16 @@
  */
 
 import { ErrorCode } from '../errors/types';
+import {
+  ProtonDriveError,
+  ValidationError,
+  ServerError,
+  RateLimitedError,
+  ConnectionError,
+  DecryptionError,
+  IntegrityError,
+  AbortError,
+} from '@protontech/drive-sdk';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -118,9 +128,23 @@ export function pathToOid(filePath: string): string {
 // ─── Error Mapping ───────────────────────────────────────────────
 
 /**
- * Map error to HTTP status code
+ * Map error to HTTP status code.
+ *
+ * Checks in order:
+ * 1. SDK error types (ProtonDriveError subclasses)
+ * 2. Our AppError codes (ErrorCode enum)
+ * 3. Message string patterns (fallback)
  */
 export function errorToStatusCode(error: any): number {
+  // SDK error types — checked first so they're never misclassified by string matching
+  if (error instanceof RateLimitedError) return 429;
+  if (error instanceof ValidationError) return 400;
+  if (error instanceof ConnectionError) return 502;
+  if (error instanceof ServerError) return 502;
+  if (error instanceof DecryptionError) return 500;
+  if (error instanceof IntegrityError) return 500;
+  if (error instanceof AbortError) return 499;
+
   const code = error?.code;
   if (code === ErrorCode.AUTH_FAILED || code === ErrorCode.INVALID_CREDENTIALS) return 401;
   if (code === ErrorCode.SESSION_EXPIRED) return 401;

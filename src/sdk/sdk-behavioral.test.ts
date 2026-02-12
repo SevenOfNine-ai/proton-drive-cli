@@ -922,4 +922,85 @@ describe('MemoryCache concurrent access patterns', () => {
     // Should only see original 2 entries
     expect(results).toHaveLength(2);
   });
+
+  test('KNOWN BUG: MemoryCache treats falsy values as missing', async () => {
+    // SDK uses `if (!value)` instead of `if (value === undefined)`,
+    // so 0, "", false, null all throw "Entity not found".
+    // This is a latent bug in the SDK — document it so we know.
+    const numCache = new MemoryCache<number>();
+    await numCache.setEntity('zero', 0);
+    await expect(numCache.getEntity('zero')).rejects.toThrow('Entity not found');
+
+    const strCache = new MemoryCache<string>();
+    await strCache.setEntity('empty', '');
+    await expect(strCache.getEntity('empty')).rejects.toThrow('Entity not found');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 16. errorToStatusCode SDK Error Mapping
+// ---------------------------------------------------------------------------
+describe('errorToStatusCode maps SDK errors', () => {
+  let errors: Record<string, any>;
+  let errorToStatusCode: (error: any) => number;
+
+  beforeAll(async () => {
+    errors = await import('@protontech/drive-sdk');
+    const validators = await import('../bridge/validators');
+    errorToStatusCode = validators.errorToStatusCode;
+  });
+
+  test('ValidationError → 400', () => {
+    const err = Object.create(errors.ValidationError.prototype);
+    err.message = 'test';
+    expect(errorToStatusCode(err)).toBe(400);
+  });
+
+  test('RateLimitedError → 429', () => {
+    const err = Object.create(errors.RateLimitedError.prototype);
+    err.message = 'test';
+    expect(errorToStatusCode(err)).toBe(429);
+  });
+
+  test('ConnectionError → 502', () => {
+    const err = Object.create(errors.ConnectionError.prototype);
+    err.message = 'test';
+    expect(errorToStatusCode(err)).toBe(502);
+  });
+
+  test('ServerError → 502', () => {
+    const err = Object.create(errors.ServerError.prototype);
+    err.message = 'test';
+    expect(errorToStatusCode(err)).toBe(502);
+  });
+
+  test('DecryptionError → 500', () => {
+    const err = Object.create(errors.DecryptionError.prototype);
+    err.message = 'test';
+    expect(errorToStatusCode(err)).toBe(500);
+  });
+
+  test('IntegrityError → 500', () => {
+    const err = Object.create(errors.IntegrityError.prototype);
+    err.message = 'test';
+    expect(errorToStatusCode(err)).toBe(500);
+  });
+
+  test('AbortError → 499', () => {
+    const err = Object.create(errors.AbortError.prototype);
+    err.message = 'test';
+    expect(errorToStatusCode(err)).toBe(499);
+  });
+
+  test('untyped TypeError → 500 (fallback)', () => {
+    const err = new TypeError('Cannot read properties of undefined');
+    expect(errorToStatusCode(err)).toBe(500);
+  });
+
+  test('SDK errors take priority over message matching', () => {
+    // A ValidationError whose message contains "not found" should still be 400
+    const err = Object.create(errors.ValidationError.prototype);
+    err.message = 'node not found in cache';
+    expect(errorToStatusCode(err)).toBe(400);
+  });
 });
