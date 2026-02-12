@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import { HttpClient } from './http-client';
 import { User, Address } from '../types/crypto';
 import { SessionManager } from '../auth/session';
 
@@ -11,7 +11,7 @@ import { SessionManager } from '../auth/session';
  * on re-login.
  */
 export class UserApiClient {
-  private client: AxiosInstance;
+  private client: HttpClient;
   private baseUrl: string;
 
   // In-memory cache populated from disk on first access
@@ -23,7 +23,7 @@ export class UserApiClient {
 
   constructor(baseUrl: string = 'https://drive-api.proton.me') {
     this.baseUrl = baseUrl;
-    this.client = axios.create({
+    this.client = HttpClient.create({
       baseURL: baseUrl,
       timeout: 30000,
       headers: {

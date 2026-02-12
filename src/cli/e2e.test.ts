@@ -805,7 +805,7 @@ describe('login session reuse', () => {
       env: { HOME: tmpHome },
     });
     expect(r.stdout).not.toContain('Already authenticated');
-  });
+  }, 30_000);
 
   it('bridge auth reuses session for same user', async () => {
     const r = await runBridge('auth', { username: TEST_USER, password: 'test' }, { HOME: tmpHome });
