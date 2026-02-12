@@ -8,7 +8,8 @@ esbuild
     target: "node22",
     outfile: "sea-bundle.cjs",
     format: "cjs",
-    // Mark native addons as external if present
-    external: [],
+    // readline/promises is a Node.js builtin subpath that esbuild doesn't
+    // auto-detect. It resolves fine at runtime in both regular node and SEA.
+    external: ["readline/promises"],
   })
   .catch(() => process.exit(1));
