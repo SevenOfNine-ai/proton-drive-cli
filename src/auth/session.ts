@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { homedir } from 'os';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { jwtDecode } from 'jwt-decode';
 import { SessionCredentials } from '../types/auth';
 import { logger } from '../utils/logger';
@@ -124,6 +124,31 @@ export class SessionManager {
       Array.isArray(session.scopes) &&
       typeof session.passwordMode === 'number'
     );
+  }
+
+  /**
+   * Hash a username for session identity comparison.
+   * Uses SHA-256 of the lowercased, trimmed username.
+   */
+  static hashUsername(username: string): string {
+    return createHash('sha256').update(username.toLowerCase().trim()).digest('hex');
+  }
+
+  /**
+   * Check if the current session belongs to a specific user.
+   * Returns true if a valid session exists AND its userHash matches.
+   * Returns false if no session exists, session is invalid, or hash doesn't match.
+   * Legacy sessions without userHash are treated as matching (backward compat).
+   */
+  static async isSessionForUser(username: string): Promise<boolean> {
+    if (!await this.hasValidSession()) return false;
+    const session = await this.loadSession();
+    if (!session) return false;
+
+    // Legacy sessions without userHash — assume they match
+    if (!session.userHash) return true;
+
+    return session.userHash === this.hashUsername(username);
   }
 
   /**

@@ -2,7 +2,8 @@ import { AuthApiClient } from '../api/auth';
 import { SRPClient } from './srp';
 import { SessionManager } from './session';
 import { SessionCredentials } from '../types/auth';
-import { CaptchaError } from '../errors/types';
+import { AppError, CaptchaError, ErrorCode } from '../errors/types';
+import { isAxiosError } from 'axios';
 import { jwtDecode } from 'jwt-decode';
 import { logger } from '../utils/logger';
 
@@ -65,6 +66,7 @@ export class AuthService {
         refreshToken: authResponse.RefreshToken,
         scopes: authResponse.Scopes,
         passwordMode: authResponse.PasswordMode,
+        userHash: SessionManager.hashUsername(username),
       };
 
       // Step 6: Save session
@@ -76,6 +78,21 @@ export class AuthService {
     } catch (error: unknown) {
       if (error instanceof CaptchaError) {
         throw error;
+      }
+
+      // Proton API abuse/rate-limit (code 2028)
+      // Note: only match protonCode 2028, NOT HTTP 422 generically —
+      // Proton returns 422 for validation errors too (e.g. Code 2001).
+      if (isAxiosError(error)) {
+        const protonCode = (error.response?.data as Record<string, unknown>)?.Code;
+        if (protonCode === 2028) {
+          throw new AppError(
+            'rate limited by Proton API — wait and retry',
+            ErrorCode.RATE_LIMITED,
+            { protonCode, httpStatus: error.response?.status },
+            true
+          );
+        }
       }
 
       if (error instanceof Error) {

@@ -16,7 +16,8 @@ import type { ProtonDriveClient } from '@protontech/drive-sdk';
 import { createSDKClient } from '../sdk/client';
 import { ensureFolderPath } from '../sdk/pathResolver';
 import { AuthService } from '../auth';
-import { ErrorCode, CaptchaError } from '../errors/types';
+import { SessionManager } from '../auth/session';
+import { AppError, ErrorCode, CaptchaError } from '../errors/types';
 import { logger, LogLevel } from '../utils/logger';
 import {
   ensureOidFolder,
@@ -176,16 +177,17 @@ async function handleAuthCommand(request: BridgeRequest): Promise<void> {
       return;
     }
 
-    // Session reuse: skip SRP if a valid session already exists
-    const authService = new AuthService();
+    // Session reuse: skip SRP if a valid session exists for this user
     try {
-      if (await authService.isAuthenticated()) {
+      if (await SessionManager.isSessionForUser(resolved.username)) {
         writeSuccess({ authenticated: true, sessionReused: true });
         return;
       }
     } catch {
       // Session file corrupted or unreadable — fall through to full login
     }
+
+    const authService = new AuthService();
 
     await authService.login(resolved.username, resolved.password, undefined);
     writeSuccess({ authenticated: true });
@@ -202,7 +204,11 @@ async function handleAuthCommand(request: BridgeRequest): Promise<void> {
       return;
     }
 
-    // Abuse rate-limit (Proton API code 2028)
+    // Abuse rate-limit (Proton API code 2028 / HTTP 422)
+    if (error instanceof AppError && error.code === ErrorCode.RATE_LIMITED) {
+      writeError('rate limited by Proton API — wait and retry', 429);
+      return;
+    }
     if (error?.response?.data?.Code === 2028) {
       writeError('rate limited by Proton API — wait and retry', 429);
       return;

@@ -3,6 +3,7 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import { AuthService } from '../auth';
+import { SessionManager } from '../auth/session';
 import { promptForToken } from '../auth/captcha-helper';
 import { CaptchaError } from '../errors/types';
 import { isAxiosError } from 'axios';
@@ -56,6 +57,35 @@ export function createLoginCommand(): Command {
             console.error(chalk.red('Error reading password from stdin:'), err);
             process.exit(1);
           }
+        }
+
+        // Session reuse: skip login if already authenticated as this user.
+        // If username is known, check if the session belongs to the same user.
+        // If the session belongs to a different user, fall through to re-login.
+        try {
+          if (username) {
+            if (await SessionManager.isSessionForUser(username)) {
+              if (!isQuiet()) {
+                console.log('Already authenticated. Log out first to log in again.');
+              } else {
+                outputResult('OK');
+              }
+              return;
+            }
+          } else {
+            // No username yet (will prompt interactively) — just check session exists
+            const authCheck = new AuthService();
+            if (await authCheck.isAuthenticated()) {
+              if (!isQuiet()) {
+                console.log('Already authenticated. Log out first to log in again.');
+              } else {
+                outputResult('OK');
+              }
+              return;
+            }
+          }
+        } catch {
+          // Session file corrupted or unreadable — fall through to login
         }
 
         if (!username || !password) {

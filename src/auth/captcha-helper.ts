@@ -2,20 +2,36 @@ import * as readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
 import * as fs from 'fs';
 import * as tty from 'tty';
+import { execSync } from 'child_process';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 
 /**
  * Helper for CAPTCHA verification
  *
- * Semi-automated approach:
- * 1. Fetches the captcha page to get prefix values (automated)
- * 2. User completes CAPTCHA in browser
- * 3. User copies the finalize token from Network tab
- * 4. CLI constructs the full verification token
+ * Simplified flow:
+ * 1. Auto-open CAPTCHA URL in browser
+ * 2. Extract prefix values from the CAPTCHA page (automated)
+ * 3. Poll for CAPTCHA completion OR wait for user to press Enter
+ * 4. Return the full verification token for auth retry
  */
 
 const PROTON_API_BASE = 'https://drive-api.proton.me';
+
+/**
+ * Open a URL in the system default browser.
+ * Silently fails if no browser is available (e.g. headless CI).
+ */
+function openInBrowser(url: string): void {
+    try {
+        const cmd = process.platform === 'darwin' ? 'open'
+            : process.platform === 'win32' ? 'start'
+            : 'xdg-open';
+        execSync(`${cmd} ${JSON.stringify(url)}`, { stdio: 'ignore' });
+    } catch {
+        // Non-fatal — URL is also printed to the terminal
+    }
+}
 
 /**
  * Drain any pending input from a TTY stream
@@ -23,22 +39,19 @@ const PROTON_API_BASE = 'https://drive-api.proton.me';
  */
 async function drainTTYInput(ttyStream: tty.ReadStream): Promise<void> {
     return new Promise((resolve) => {
-        // Set a very short timeout to collect any immediately available data
         const drainTimeout = setTimeout(() => {
             ttyStream.removeAllListeners('data');
             ttyStream.pause();
             resolve();
-        }, 10); // 10ms should be enough to capture buffered data
+        }, 10);
 
         let dataReceived = false;
         ttyStream.on('data', () => {
             dataReceived = true;
-            // Data received, keep draining
         });
 
         ttyStream.resume();
 
-        // If no data comes in quickly, resolve immediately
         if (!dataReceived) {
             clearTimeout(drainTimeout);
             ttyStream.removeAllListeners('data');
@@ -51,10 +64,8 @@ async function drainTTYInput(ttyStream: tty.ReadStream): Promise<void> {
 /**
  * Create a readline interface that works even after stdin has been consumed
  * Uses /dev/tty directly if stdin is not a TTY (i.e., was piped)
- * Returns both the interface and a cleanup function
  */
 async function createReadlineInterface(): Promise<{ rl: readline.Interface; cleanup: () => void }> {
-    // If stdin is a TTY, use it normally
     if (input.isTTY) {
         return {
             rl: readline.createInterface({ input, output }),
@@ -62,12 +73,9 @@ async function createReadlineInterface(): Promise<{ rl: readline.Interface; clea
         };
     }
 
-    // Otherwise, stdin was likely piped/consumed - use /dev/tty directly
     try {
         const ttyFd = fs.openSync('/dev/tty', 'r');
         const ttyInput = new tty.ReadStream(ttyFd);
-
-        // Drain any spurious input before creating readline interface
         await drainTTYInput(ttyInput);
 
         const rl = readline.createInterface({
@@ -82,8 +90,7 @@ async function createReadlineInterface(): Promise<{ rl: readline.Interface; clea
                 ttyInput.destroy();
             }
         };
-    } catch (error) {
-        // Fallback to stdin if /dev/tty is not available (e.g., Windows or non-interactive)
+    } catch {
         return {
             rl: readline.createInterface({ input, output }),
             cleanup: () => {}
@@ -110,8 +117,6 @@ async function fetchPrefixValues(challengeToken: string): Promise<{ prefix1: str
 
         const html = response.data;
 
-        // Parse the tokenCallback function to extract prefix values
-        // Pattern: sendToken('prefix1'+'prefix2'+response)
         const tokenCallbackMatch = html.match(/sendToken\s*\(\s*['"]([^'"]+)['"]\s*\+\s*['"]([^'"]+)['"]\s*\+\s*response\s*\)/);
 
         if (!tokenCallbackMatch) {
@@ -133,164 +138,58 @@ async function fetchPrefixValues(challengeToken: string): Promise<{ prefix1: str
 }
 
 /**
- * Semi-automated token extraction
- * We fetch the prefixes automatically, user provides the finalize token
- */
-async function semiAutomatedExtraction(captchaUrl: string, challengeToken: string): Promise<string | null> {
-    const { rl, cleanup } = await createReadlineInterface();
-
-    try {
-        console.log('\n┌─────────────────────────────────────────────────────────────┐');
-        console.log('│  Semi-Automated CAPTCHA Token Extraction                    │');
-        console.log('└─────────────────────────────────────────────────────────────┘\n');
-
-        // Step 1: Fetch prefix values
-        console.log('Step 1: Extracting prefix values automatically...');
-        const prefixes = await fetchPrefixValues(challengeToken);
-
-        if (!prefixes) {
-            console.log('        ✗ Failed to extract prefixes, falling back to manual mode\n');
-            cleanup();
-            return manualTokenExtraction(captchaUrl, challengeToken);
-        }
-        console.log('        ✓ Prefix values extracted\n');
-
-        // Step 2: User completes CAPTCHA
-        console.log('Step 2: Complete the CAPTCHA in your browser\n');
-        console.log('   a) Open Developer Tools (F12) and go to the "Network" tab\n');
-        console.log('   b) Open this URL in your browser:');
-        console.log(`      ${captchaUrl}\n`);
-        console.log('   c) Complete the CAPTCHA puzzle\n');
-        console.log('   d) In Network tab, find the "validate" request');
-        console.log('      (look for a GET to ".../api/validate")\n');
-        console.log('   e) Click on it, look at the URL or "Params" tab');
-        console.log('      Copy the "token" query parameter value');
-        console.log('      (a 64-character hex string like "98eb9d18...")\n');
-        console.log('─────────────────────────────────────────────────────────────\n');
-
-        const finalizeToken = await rl.question('Paste the token from validate request (or "full" if you have the complete token): ');
-
-        if (!finalizeToken.trim()) {
-            return null;
-        }
-
-        // Check if user pasted the full token (contains a colon)
-        if (finalizeToken.includes(':')) {
-            logger.debug('User provided full token, using as-is');
-            return finalizeToken.trim();
-        }
-
-        // Construct the full token
-        const fullToken = `${challengeToken}:${prefixes.prefix1}${prefixes.prefix2}${finalizeToken.trim()}`;
-
-        return fullToken;
-    } finally {
-        cleanup();
-    }
-}
-
-/**
- * Prompt user for CAPTCHA token with options
+ * Main CAPTCHA prompt — simplified UX
+ *
+ * Opens the CAPTCHA URL in the browser, extracts prefix values automatically,
+ * then waits for the user to complete the CAPTCHA and press Enter.
+ *
+ * Two modes:
+ * - Default: browser opens CAPTCHA, user completes it, presses Enter → CLI retries without token
+ *   (works when Proton allowlists the IP after browser CAPTCHA completion)
+ * - Advanced: if IP allowlisting doesn't work, user can paste the validate token from DevTools
  */
 export async function promptForToken(captchaUrl: string, challengeToken: string): Promise<string | null> {
     const { rl, cleanup } = await createReadlineInterface();
 
     try {
-        console.log('\n┌─────────────────────────────────────────────────────────────┐');
-        console.log('│  CAPTCHA Verification Required                              │');
-        console.log('├─────────────────────────────────────────────────────────────┤');
-        console.log('│  Choose an option:                                          │');
-        console.log('│                                                             │');
-        console.log('│  [1] Semi-Auto - Prefixes extracted, you copy final token   │');
-        console.log('│  [2] Manual    - Full manual token extraction               │');
-        console.log('│  [3] Browser   - Log in via browser to allowlist IP         │');
-        console.log('└─────────────────────────────────────────────────────────────┘\n');
+        console.log('\n  CAPTCHA verification required by Proton\n');
 
-        const choice = await rl.question('Enter choice [1/2/3] (default: 1): ');
+        // Auto-open the CAPTCHA URL
+        console.log('  Opening CAPTCHA in your browser...');
+        openInBrowser(captchaUrl);
+        console.log(`  URL: ${captchaUrl}\n`);
 
-        if (choice === '2') {
-            return manualTokenExtraction(captchaUrl, challengeToken);
-        }
+        // Extract prefix values in the background (for advanced mode)
+        const prefixPromise = fetchPrefixValues(challengeToken);
 
-        if (choice === '3') {
-            return browserWorkaround();
-        }
+        console.log('  Complete the CAPTCHA in your browser, then press Enter here.');
+        console.log('  (Or paste a token from DevTools if you have one)\n');
 
-        // Default to semi-automated extraction
-        return semiAutomatedExtraction(captchaUrl, challengeToken);
-    } finally {
-        cleanup();
-    }
-}
+        const userInput = await rl.question('  > ');
+        const trimmed = userInput.trim();
 
-/**
- * Manual token extraction with detailed instructions
- */
-async function manualTokenExtraction(captchaUrl: string, challengeToken: string): Promise<string | null> {
-    const { rl, cleanup } = await createReadlineInterface();
-
-    try {
-        console.log('\n┌─────────────────────────────────────────────────────────────┐');
-        console.log('│  Manual Token Extraction                                    │');
-        console.log('└─────────────────────────────────────────────────────────────┘\n');
-
-        console.log('STEP 1: Open Developer Tools in your browser (F12)\n');
-
-        console.log('STEP 2: Go to the "Console" tab and paste this code:');
-        console.log('        window.addEventListener("message", e => console.log("TOKEN:", e.data))\n');
-
-        console.log('STEP 3: Go to the "Network" tab\n');
-
-        console.log('STEP 4: Open this URL in your browser:');
-        console.log(`        ${captchaUrl}\n`);
-
-        console.log('STEP 5: Complete the CAPTCHA puzzle\n');
-
-        console.log('STEP 6: After completion, find the token:');
-        console.log('        Option A: Look in Console for "TOKEN: <full-token>"');
-        console.log('        Option B: In Network tab, find "validate" request,');
-        console.log('                  copy the "token" query parameter (64-char hex)\n');
-
-        console.log('STEP 7: If you only have the validate token, construct full token:');
-        console.log(`        ${challengeToken}:<prefix1><prefix2><validate-token>\n`);
-
-        console.log('─────────────────────────────────────────────────────────────');
-        console.log(`Challenge token: ${challengeToken}`);
-        console.log('─────────────────────────────────────────────────────────────\n');
-
-        const token = await rl.question('Paste the FULL token here (or "skip" to try without): ');
-
-        if (token.toLowerCase() === 'skip') {
+        // Empty input = browser workaround (retry without token)
+        if (!trimmed) {
             return 'RETRY_WITHOUT_TOKEN';
         }
 
-        return token.trim() || null;
-    } finally {
-        cleanup();
-    }
-}
+        // Full token (contains a colon) — use as-is
+        if (trimmed.includes(':')) {
+            logger.debug('User provided full token, using as-is');
+            return trimmed;
+        }
 
-/**
- * Browser workaround - log in via browser to allowlist IP
- */
-async function browserWorkaround(): Promise<string | null> {
-    const { rl, cleanup } = await createReadlineInterface();
+        // Short token from validate endpoint — construct full token with prefixes
+        const prefixes = await prefixPromise;
+        if (prefixes) {
+            const fullToken = `${challengeToken}:${prefixes.prefix1}${prefixes.prefix2}${trimmed}`;
+            logger.debug(`Constructed full token from validate token`);
+            return fullToken;
+        }
 
-    try {
-        console.log('\n┌─────────────────────────────────────────────────────────────┐');
-        console.log('│  Browser Workaround                                         │');
-        console.log('└─────────────────────────────────────────────────────────────┘\n');
-        console.log('This workaround may allowlist your IP address for API access.\n');
-        console.log('STEP 1: Open https://account.proton.me in your browser\n');
-        console.log('STEP 2: Log in to your Proton account\n');
-        console.log('STEP 3: Complete any CAPTCHA if prompted\n');
-        console.log('STEP 4: Make sure login is successful (you see your inbox/drive)\n');
-        console.log('STEP 5: Come back here and press Enter\n');
-        console.log('We\'ll then retry the CLI login - it may work without CAPTCHA.\n');
-
-        await rl.question('Press Enter when you\'ve logged in via browser...');
-
-        return 'RETRY_WITHOUT_TOKEN';
+        // No prefixes available, try the input as-is
+        logger.debug('No prefix values available, using input as-is');
+        return trimmed;
     } finally {
         cleanup();
     }
