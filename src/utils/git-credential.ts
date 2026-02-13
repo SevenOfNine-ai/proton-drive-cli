@@ -13,6 +13,8 @@
 
 import { execFile } from 'child_process';
 
+import { PROTON_CREDENTIAL_HOST } from '../constants';
+
 export interface GitCredential {
   protocol: string;
   host: string;
@@ -20,7 +22,6 @@ export interface GitCredential {
   password: string;
 }
 
-const DEFAULT_HOST = 'drive.proton.me';
 const DEFAULT_PROTOCOL = 'https';
 const TIMEOUT_MS = 10_000;
 
@@ -87,13 +88,13 @@ function runGitCredential(
  * Writes `protocol=https\nhost=<host>\n\n` to stdin of
  * `git credential fill` and parses the key=value output.
  *
- * @param host - Credential host (default: drive.proton.me)
+ * @param host - Credential host (default: proton.me)
  * @returns Resolved credential with username and password
  */
 export async function gitCredentialFill(host?: string): Promise<GitCredential> {
   const input = formatCredentialInput({
     protocol: DEFAULT_PROTOCOL,
-    host: host || DEFAULT_HOST,
+    host: host || PROTON_CREDENTIAL_HOST,
   });
 
   const output = await runGitCredential('fill', input);
@@ -108,7 +109,7 @@ export async function gitCredentialFill(host?: string): Promise<GitCredential> {
 
   return {
     protocol: parsed.protocol || DEFAULT_PROTOCOL,
-    host: parsed.host || host || DEFAULT_HOST,
+    host: parsed.host || host || PROTON_CREDENTIAL_HOST,
     username: parsed.username,
     password: parsed.password,
   };

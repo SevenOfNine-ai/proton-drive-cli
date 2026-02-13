@@ -38,13 +38,13 @@ describe('gitCredentialFill', () => {
 
   it('parses valid credential output', async () => {
     simulateExecFile(
-      'protocol=https\nhost=drive.proton.me\nusername=user@proton.me\npassword=secret123\n',
+      'protocol=https\nhost=proton.me\nusername=user@proton.me\npassword=secret123\n',
     );
 
     const result = await gitCredentialFill();
     expect(result).toEqual({
       protocol: 'https',
-      host: 'drive.proton.me',
+      host: 'proton.me',
       username: 'user@proton.me',
       password: 'secret123',
     });
@@ -67,12 +67,12 @@ describe('gitCredentialFill', () => {
   });
 
   it('throws if username is missing', async () => {
-    simulateExecFile('protocol=https\nhost=drive.proton.me\npassword=secret\n');
+    simulateExecFile('protocol=https\nhost=proton.me\npassword=secret\n');
     await expect(gitCredentialFill()).rejects.toThrow('did not return username and password');
   });
 
   it('throws if password is missing', async () => {
-    simulateExecFile('protocol=https\nhost=drive.proton.me\nusername=user@proton.me\n');
+    simulateExecFile('protocol=https\nhost=proton.me\nusername=user@proton.me\n');
     await expect(gitCredentialFill()).rejects.toThrow('did not return username and password');
   });
 
@@ -93,7 +93,7 @@ describe('gitCredentialFill', () => {
 
   it('uses execFile with correct arguments', async () => {
     simulateExecFile(
-      'protocol=https\nhost=drive.proton.me\nusername=user@proton.me\npassword=pass\n',
+      'protocol=https\nhost=proton.me\nusername=user@proton.me\npassword=pass\n',
     );
 
     await gitCredentialFill();
@@ -108,7 +108,7 @@ describe('gitCredentialFill', () => {
 
   it('handles lines with = in the value', async () => {
     simulateExecFile(
-      'protocol=https\nhost=drive.proton.me\nusername=user@proton.me\npassword=pass=word=123\n',
+      'protocol=https\nhost=proton.me\nusername=user@proton.me\npassword=pass=word=123\n',
     );
 
     const result = await gitCredentialFill();
@@ -117,7 +117,7 @@ describe('gitCredentialFill', () => {
 
   it('handles Windows-style line endings', async () => {
     simulateExecFile(
-      'protocol=https\r\nhost=drive.proton.me\r\nusername=user@proton.me\r\npassword=secret\r\n',
+      'protocol=https\r\nhost=proton.me\r\nusername=user@proton.me\r\npassword=secret\r\n',
     );
 
     const result = await gitCredentialFill();
@@ -136,7 +136,7 @@ describe('gitCredentialApprove', () => {
 
     await gitCredentialApprove({
       protocol: 'https',
-      host: 'drive.proton.me',
+      host: 'proton.me',
       username: 'user@proton.me',
       password: 'secret',
     });
@@ -154,7 +154,7 @@ describe('gitCredentialApprove', () => {
     await expect(
       gitCredentialApprove({
         protocol: 'https',
-        host: 'drive.proton.me',
+        host: 'proton.me',
         username: 'user',
         password: 'pass',
       }),
@@ -172,7 +172,7 @@ describe('gitCredentialReject', () => {
 
     await gitCredentialReject({
       protocol: 'https',
-      host: 'drive.proton.me',
+      host: 'proton.me',
       username: 'user@proton.me',
       password: 'wrong-pass',
     });

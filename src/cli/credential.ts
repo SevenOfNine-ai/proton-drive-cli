@@ -17,8 +17,7 @@ import { gitCredentialFill, gitCredentialApprove, gitCredentialReject } from '..
 import { readPasswordFromStdin } from '../utils/password';
 import { handleError } from '../errors/handler';
 import { isQuiet, outputResult } from '../utils/output';
-
-const DEFAULT_HOST = 'drive.proton.me';
+import { PROTON_CREDENTIAL_HOST } from '../constants';
 
 export function createCredentialCommand(): Command {
   const cmd = new Command('credential');
@@ -30,7 +29,7 @@ export function createCredentialCommand(): Command {
     .description('Store Proton credentials in the git credential helper')
     .option('-u, --username <email>', 'Proton account email')
     .option('--password-stdin', 'Read password from stdin')
-    .option('--host <host>', 'Credential host', DEFAULT_HOST)
+    .option('--host <host>', 'Credential host', PROTON_CREDENTIAL_HOST)
     .action(async (options) => {
       try {
         let username = options.username;
@@ -92,7 +91,7 @@ export function createCredentialCommand(): Command {
     .command('remove')
     .description('Remove Proton credentials from the git credential helper')
     .option('-u, --username <email>', 'Proton account email')
-    .option('--host <host>', 'Credential host', DEFAULT_HOST)
+    .option('--host <host>', 'Credential host', PROTON_CREDENTIAL_HOST)
     .action(async (options) => {
       try {
         let username = options.username;
@@ -134,7 +133,7 @@ export function createCredentialCommand(): Command {
   cmd
     .command('verify')
     .description('Verify that credentials can be resolved from the git credential helper')
-    .option('--host <host>', 'Credential host', DEFAULT_HOST)
+    .option('--host <host>', 'Credential host', PROTON_CREDENTIAL_HOST)
     .action(async (options) => {
       try {
         const cred = await gitCredentialFill(options.host);

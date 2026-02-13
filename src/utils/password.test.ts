@@ -21,7 +21,7 @@ describe('resolveCredentials', () => {
     test('calls gitCredentialFill when credentialProvider is "git"', async () => {
       mockedGitCredentialFill.mockResolvedValue({
         protocol: 'https',
-        host: 'drive.proton.me',
+        host: 'proton.me',
         username: 'user@proton.me',
         password: 's3cret',
       });
@@ -68,7 +68,7 @@ describe('resolvePassword', () => {
   test('returns only password from resolveCredentials', async () => {
     mockedGitCredentialFill.mockResolvedValue({
       protocol: 'https',
-      host: 'drive.proton.me',
+      host: 'proton.me',
       username: 'user@proton.me',
       password: 'my-password',
     });
