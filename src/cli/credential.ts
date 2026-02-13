@@ -27,7 +27,7 @@ export function createCredentialCommand(): Command {
   cmd
     .command('store')
     .description('Store Proton credentials in the git credential helper')
-    .option('-u, --username <email>', 'Proton account email')
+    .option('-u, --username <account>', 'Proton email or username')
     .option('--password-stdin', 'Read password from stdin')
     .option('--host <host>', 'Credential host', PROTON_CREDENTIAL_HOST)
     .action(async (options) => {
@@ -52,9 +52,9 @@ export function createCredentialCommand(): Command {
             {
               type: 'input',
               name: 'username',
-              message: 'Proton email:',
+              message: 'Proton email or username:',
               when: !username,
-              validate: (input: string) => input.includes('@') || 'Enter a valid email',
+              validate: (input: string) => input.length > 0 || 'Email or username is required',
             },
             {
               type: 'password',
@@ -90,7 +90,7 @@ export function createCredentialCommand(): Command {
   cmd
     .command('remove')
     .description('Remove Proton credentials from the git credential helper')
-    .option('-u, --username <email>', 'Proton account email')
+    .option('-u, --username <account>', 'Proton email or username')
     .option('--host <host>', 'Credential host', PROTON_CREDENTIAL_HOST)
     .action(async (options) => {
       try {
@@ -106,8 +106,8 @@ export function createCredentialCommand(): Command {
             {
               type: 'input',
               name: 'username',
-              message: 'Proton email to remove:',
-              validate: (input: string) => input.includes('@') || 'Enter a valid email',
+              message: 'Proton email or username to remove:',
+              validate: (input: string) => input.length > 0 || 'Email or username is required',
             },
           ]);
           username = answers.username;
