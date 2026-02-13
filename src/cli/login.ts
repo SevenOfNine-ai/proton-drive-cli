@@ -274,3 +274,42 @@ export function createStatusCommand(): Command {
 
   return command;
 }
+
+/**
+ * Create the session refresh command.
+ *
+ * Designed for headless use by the system tray heartbeat:
+ * - Silent on success (exit 0)
+ * - Silent exit 0 if no session exists (nothing to refresh)
+ * - Error message + exit 1 on failure
+ *
+ * This calls POST /auth/v4/refresh (NOT a login attempt) —
+ * it will never trigger CAPTCHA or rate-limiting.
+ */
+export function createSessionRefreshCommand(): Command {
+  const command = new Command('session');
+
+  command
+    .command('refresh')
+    .description('Refresh the access token (used by tray heartbeat)')
+    .action(async () => {
+      try {
+        const session = await SessionManager.loadSession();
+        if (!session) {
+          // No session — nothing to refresh, silent success
+          process.exit(0);
+        }
+
+        const authService = new AuthService();
+        await authService.refreshSession();
+        // Silent success
+      } catch (error) {
+        if (process.env.DEBUG === 'true') {
+          handleError(error, true);
+        }
+        process.exit(1);
+      }
+    });
+
+  return command;
+}

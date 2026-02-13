@@ -2,7 +2,7 @@
 import { program } from 'commander';
 import chalk from 'chalk';
 import { version as pkgVersion } from '../package.json';
-import { createLoginCommand, createLogoutCommand, createStatusCommand } from './cli/login';
+import { createLoginCommand, createLogoutCommand, createStatusCommand, createSessionRefreshCommand } from './cli/login';
 import { createLsCommand } from './cli/ls';
 import { createUploadCommand } from './cli/upload';
 import { createDownloadCommand } from './cli/download';
@@ -79,6 +79,7 @@ program
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());
 program.addCommand(createStatusCommand());
+program.addCommand(createSessionRefreshCommand());
 
 // Add drive commands
 program.addCommand(createLsCommand());
