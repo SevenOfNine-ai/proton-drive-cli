@@ -37,6 +37,45 @@ function simulateSequentialCalls(...responses: Array<{ stdout: string; error?: s
   });
 }
 
+/** Helper: build a pass-cli login item in the real nested JSON structure. */
+function makePassCliItem(opts: {
+  title: string;
+  email?: string;
+  username?: string;
+  password?: string;
+  urls?: string[];
+  state?: string;
+}) {
+  return {
+    id: 'item-id',
+    share_id: 'share-id',
+    vault_id: 'vault-id',
+    content: {
+      title: opts.title,
+      note: '',
+      item_uuid: 'uuid',
+      content: {
+        Login: {
+          email: opts.email || '',
+          username: opts.username || '',
+          password: opts.password || '',
+          urls: opts.urls || [],
+          totp_uri: '',
+          passkeys: [],
+        },
+      },
+      extra_fields: [],
+    },
+    state: opts.state || 'Active',
+    flags: [],
+  };
+}
+
+/** Wrap items in { items: [...] } like real pass-cli output. */
+function wrapItems(items: any[]) {
+  return JSON.stringify({ items });
+}
+
 describe('passCliTest', () => {
   beforeEach(() => jest.resetAllMocks());
 
@@ -94,7 +133,16 @@ describe('listVaults', () => {
     ]);
   });
 
-  it('parses vault list from object response', async () => {
+  it('parses vault list from object response with vault_id', async () => {
+    simulateExecFile(JSON.stringify({
+      vaults: [{ vault_id: 'vid1', name: 'Personal' }],
+    }));
+
+    const vaults = await listVaults();
+    expect(vaults).toEqual([{ id: 'vid1', name: 'Personal' }]);
+  });
+
+  it('parses vault list from object response with id', async () => {
     simulateExecFile(JSON.stringify({
       vaults: [{ id: 'v1', name: 'Personal' }],
     }));
@@ -113,9 +161,9 @@ describe('searchVault', () => {
   beforeEach(() => jest.resetAllMocks());
 
   it('finds login items with proton.me URL', async () => {
-    simulateExecFile(JSON.stringify([
-      { name: 'Proton', username: 'user@proton.me', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] },
-      { name: 'Other', username: 'other', password: 'pw', urls: ['https://github.com'] },
+    simulateExecFile(wrapItems([
+      makePassCliItem({ title: 'Proton', username: 'user', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] }),
+      makePassCliItem({ title: 'GitHub', username: 'other', password: 'pw', urls: ['https://github.com'] }),
     ]));
 
     const results = await searchVault('Personal');
@@ -125,8 +173,8 @@ describe('searchVault', () => {
   });
 
   it('returns empty array when no matches', async () => {
-    simulateExecFile(JSON.stringify([
-      { name: 'Other', username: 'other', password: 'pw', urls: ['https://github.com'] },
+    simulateExecFile(wrapItems([
+      makePassCliItem({ title: 'Other', username: 'other', password: 'pw', urls: ['https://github.com'] }),
     ]));
 
     const results = await searchVault('Personal');
@@ -134,8 +182,17 @@ describe('searchVault', () => {
   });
 
   it('matches proton.me URL case-insensitively', async () => {
+    simulateExecFile(wrapItems([
+      makePassCliItem({ title: 'Proton', username: 'user', password: 'pass', urls: ['https://PROTON.ME/login'] }),
+    ]));
+
+    const results = await searchVault('Personal');
+    expect(results).toHaveLength(1);
+  });
+
+  it('handles bare array response (backward compat)', async () => {
     simulateExecFile(JSON.stringify([
-      { name: 'Proton', username: 'user', password: 'pass', urls: ['https://PROTON.ME/login'] },
+      makePassCliItem({ title: 'Proton', email: 'u@proton.me', password: 'p', urls: ['https://proton.me'] }),
     ]));
 
     const results = await searchVault('Personal');
@@ -149,10 +206,10 @@ describe('searchProtonEntry', () => {
   it('finds entry in first vault', async () => {
     simulateSequentialCalls(
       // listVaults
-      { stdout: JSON.stringify([{ id: 'v1', name: 'Personal' }]) },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
       // searchVault('Personal')
-      { stdout: JSON.stringify([
-        { name: 'Proton', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] },
+      { stdout: wrapItems([
+        makePassCliItem({ title: 'Proton', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] }),
       ]) },
     );
 
@@ -164,12 +221,12 @@ describe('searchProtonEntry', () => {
   it('searches subsequent vaults if first has no match', async () => {
     simulateSequentialCalls(
       // listVaults
-      { stdout: JSON.stringify([{ id: 'v1', name: 'Work' }, { id: 'v2', name: 'Personal' }]) },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Work' }, { vault_id: 'v2', name: 'Personal' }] }) },
       // searchVault('Work') — no match
-      { stdout: JSON.stringify([]) },
+      { stdout: wrapItems([]) },
       // searchVault('Personal') — match
-      { stdout: JSON.stringify([
-        { name: 'Proton', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] },
+      { stdout: wrapItems([
+        makePassCliItem({ title: 'Proton', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] }),
       ]) },
     );
 
@@ -179,8 +236,8 @@ describe('searchProtonEntry', () => {
 
   it('returns null when no vaults have a match', async () => {
     simulateSequentialCalls(
-      { stdout: JSON.stringify([{ id: 'v1', name: 'Personal' }]) },
-      { stdout: JSON.stringify([]) },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
+      { stdout: wrapItems([]) },
     );
 
     const entry = await searchProtonEntry();
@@ -208,10 +265,10 @@ describe('PassCliProvider', () => {
       // passCliTest
       { stdout: '' },
       // listVaults
-      { stdout: JSON.stringify([{ id: 'v1', name: 'Personal' }]) },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
       // searchVault
-      { stdout: JSON.stringify([
-        { name: 'Proton', email: 'user@proton.me', password: 's3cret', urls: ['https://proton.me'] },
+      { stdout: wrapItems([
+        makePassCliItem({ title: 'Proton', email: 'user@proton.me', password: 's3cret', urls: ['https://proton.me'] }),
       ]) },
     );
 
@@ -220,12 +277,26 @@ describe('PassCliProvider', () => {
     expect(creds).toEqual({ username: 'user@proton.me', password: 's3cret' });
   });
 
+  it('resolve prefers username field when email is empty', async () => {
+    simulateSequentialCalls(
+      { stdout: '' },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
+      { stdout: wrapItems([
+        makePassCliItem({ title: 'Proton', username: 'agent.user', password: 'pass', urls: ['https://proton.me'] }),
+      ]) },
+    );
+
+    const provider = new PassCliProvider();
+    const creds = await provider.resolve();
+    expect(creds.username).toBe('agent.user');
+  });
+
   it('resolve uses username from options over entry', async () => {
     simulateSequentialCalls(
       { stdout: '' },
-      { stdout: JSON.stringify([{ id: 'v1', name: 'Personal' }]) },
-      { stdout: JSON.stringify([
-        { name: 'Proton', email: 'vault@proton.me', password: 'pass', urls: ['https://proton.me'] },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
+      { stdout: wrapItems([
+        makePassCliItem({ title: 'Proton', email: 'vault@proton.me', password: 'pass', urls: ['https://proton.me'] }),
       ]) },
     );
 
@@ -243,33 +314,42 @@ describe('PassCliProvider', () => {
   it('resolve throws when no entry found', async () => {
     simulateSequentialCalls(
       { stdout: '' },
-      { stdout: JSON.stringify([{ id: 'v1', name: 'Personal' }]) },
-      { stdout: JSON.stringify([]) },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
+      { stdout: wrapItems([]) },
     );
 
     const provider = new PassCliProvider();
     await expect(provider.resolve()).rejects.toThrow('No Proton login entry found');
   });
 
-  it('store calls pass-cli item create', async () => {
-    simulateExecFile('');
+  it('store calls pass-cli item create with vault name', async () => {
+    simulateSequentialCalls(
+      // listVaults
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
+      // item create
+      { stdout: '' },
+    );
     const provider = new PassCliProvider();
     await provider.store('user@proton.me', 'password123');
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      'pass-cli',
-      ['item', 'create', 'login', '--title', 'Proton', '--email', 'user@proton.me', '--password', 'password123', '--url', 'https://proton.me'],
-      expect.any(Object),
-      expect.any(Function),
-    );
+    // Second call should be the item create
+    const createCall = mockExecFile.mock.calls[1];
+    expect(createCall[1]).toEqual([
+      'item', 'create', 'login',
+      '--vault-name', 'Personal',
+      '--title', 'Proton',
+      '--email', 'user@proton.me',
+      '--password', 'password123',
+      '--url', 'https://proton.me',
+    ]);
   });
 
   it('verify returns true when entry exists with password', async () => {
     simulateSequentialCalls(
       { stdout: '' },
-      { stdout: JSON.stringify([{ id: 'v1', name: 'Personal' }]) },
-      { stdout: JSON.stringify([
-        { name: 'Proton', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] },
+      { stdout: JSON.stringify({ vaults: [{ vault_id: 'v1', name: 'Personal' }] }) },
+      { stdout: wrapItems([
+        makePassCliItem({ title: 'Proton', email: 'user@proton.me', password: 'pass', urls: ['https://proton.me'] }),
       ]) },
     );
 

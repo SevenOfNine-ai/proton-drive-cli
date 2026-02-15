@@ -71,7 +71,7 @@ async function listVaults(): Promise<PassCliVault[]> {
   const parsed = JSON.parse(output);
   // pass-cli returns { vaults: [...] } or an array directly
   const vaults = Array.isArray(parsed) ? parsed : (parsed.vaults || []);
-  return vaults.map((v: any) => ({ id: v.id || v.vaultId, name: v.name }));
+  return vaults.map((v: any) => ({ id: v.vault_id || v.id || v.vaultId, name: v.name }));
 }
 
 /** Search a single vault for login items matching proton.me URL. */
@@ -81,19 +81,26 @@ async function searchVault(vault: string): Promise<PassCliLoginItem[]> {
     '--filter-type', 'login',
     '--output', 'json',
   ]);
-  const items: any[] = JSON.parse(output);
+  const parsed = JSON.parse(output);
+  // pass-cli returns { items: [...] } or a bare array
+  const items: any[] = Array.isArray(parsed) ? parsed : (parsed.items || []);
   return items
     .filter((item: any) => {
-      const urls: string[] = item.urls || [];
+      // URLs live at content.content.Login.urls
+      const login = item.content?.content?.Login;
+      const urls: string[] = login?.urls || [];
       return urls.some((url: string) => PROTON_URL_PATTERN.test(url));
     })
-    .map((item: any) => ({
-      name: item.name || item.title,
-      username: item.username,
-      email: item.email,
-      password: item.password,
-      urls: item.urls,
-    }));
+    .map((item: any) => {
+      const login = item.content?.content?.Login || {};
+      return {
+        name: item.content?.title || item.name,
+        username: login.username,
+        email: login.email,
+        password: login.password,
+        urls: login.urls,
+      };
+    });
 }
 
 /** Search all vaults for a Proton login entry. */
@@ -142,8 +149,12 @@ export class PassCliProvider implements CredentialProvider {
   }
 
   async store(username: string, password: string): Promise<void> {
+    // Use the first available vault
+    const vaults = await listVaults();
+    const vaultName = vaults[0]?.name || 'Personal';
     await runPassCli([
       'item', 'create', 'login',
+      '--vault-name', vaultName,
       '--title', 'Proton',
       '--email', username,
       '--password', password,
