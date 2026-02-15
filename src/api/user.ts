@@ -28,7 +28,8 @@ export class UserApiClient {
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
-        'x-pm-appversion': 'web-drive@5.2.0',
+        // Identify as third-party CLI client to avoid Sentinel blocking
+        'x-pm-appversion': 'ProtonGitLFS_CLI_0.1.1',
       },
     });
 

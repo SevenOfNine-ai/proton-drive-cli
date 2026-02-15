@@ -156,7 +156,7 @@ describe('HTTPClientAdapter', () => {
         timeoutMs: 30000,
       });
 
-      expect(headers.get('x-pm-appversion')).toBe('web-drive@5.2.0');
+      expect(headers.get('x-pm-appversion')).toBe('ProtonGitLFS_CLI_0.1.1');
     });
 
     it('preserves existing x-pm-appversion', async () => {

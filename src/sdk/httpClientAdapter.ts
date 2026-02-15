@@ -47,9 +47,10 @@ export class HTTPClientAdapter implements ProtonDriveHTTPClient {
       headers.set('Authorization', `Bearer ${session.accessToken}`);
       headers.set('x-pm-uid', session.uid);
     }
-    // Required by Proton API — must match the value used during auth
+    // Identify as third-party CLI client to avoid Sentinel blocking
+    // (was 'web-drive@5.2.0' which impersonated official web client)
     if (!headers.has('x-pm-appversion')) {
-      headers.set('x-pm-appversion', 'web-drive@5.2.0');
+      headers.set('x-pm-appversion', 'ProtonGitLFS_CLI_0.1.1');
     }
   }
 

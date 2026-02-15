@@ -18,7 +18,9 @@ export class AuthApiClient {
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
-        'x-pm-appversion': 'web-drive@5.2.0',
+        // Identify as third-party CLI client to avoid Sentinel blocking
+        // (was 'web-drive@5.2.0' which impersonated official web client)
+        'x-pm-appversion': 'ProtonGitLFS_CLI_0.1.1',
       },
     });
   }
