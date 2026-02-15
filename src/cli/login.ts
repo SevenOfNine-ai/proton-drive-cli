@@ -8,7 +8,7 @@ import { promptForToken } from '../auth/captcha-helper';
 import { CaptchaError } from '../errors/types';
 import { handleError } from '../errors/handler';
 import { isVerbose, isQuiet, outputResult } from '../utils/output';
-import { readPasswordFromStdin, resolveCredentials } from '../utils/password';
+import { readPasswordFromStdin, resolveCredentials, normalizeProviderName, createProvider } from '../credentials';
 
 /**
  * Create the login command for the CLI
@@ -29,19 +29,21 @@ export function createLoginCommand(): Command {
     .description('Authenticate with Proton Drive')
     .option('-u, --username <email|username>', 'Proton account email or username')
     .option('--password-stdin', 'Read password from stdin (for scripts with special characters)')
-    .option('--credential-provider <type>', 'Credential provider: git (use git credential manager)')
+    .option('--credential-provider <type>', 'Credential source: git-credential, pass-cli (default: interactive)')
     .action(async (options) => {
       try {
         let username = options.username;
         let password: string | undefined;
 
-        // Handle --credential-provider git (resolves both username + password)
-        if (options.credentialProvider === 'git') {
-          const creds = await resolveCredentials({ credentialProvider: 'git' });
+        // Handle --credential-provider (git-credential, pass-cli, etc.)
+        if (options.credentialProvider) {
+          const name = normalizeProviderName(options.credentialProvider);
+          const provider = createProvider(name);
+          const creds = await provider.resolve({ username });
           username = creds.username || username;
           password = creds.password;
           if (!isQuiet()) {
-            console.log(chalk.dim(`[INFO] Credentials resolved via git credential helper for ${username}`));
+            console.log(chalk.dim(`[INFO] Credentials resolved via ${name} for ${username}`));
           }
         }
 
