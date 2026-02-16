@@ -70,12 +70,11 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Build SDK
+      - name: Build SDK (uses npm - external Proton project)
         run: |
           cd submodules/sdk/js/sdk
-          corepack enable
-          yarn install
-          yarn build
+          npm install
+          npm run build
 
       - name: Generate TypeDoc API documentation
         run: yarn docs
