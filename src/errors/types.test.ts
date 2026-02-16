@@ -8,6 +8,8 @@ import {
   isRateLimitError,
   isCaptchaError,
   ErrorCode,
+  ErrorCategory,
+  categorizeError,
 } from './types';
 
 describe('error types', () => {
@@ -144,6 +146,160 @@ describe('error types', () => {
         message: 'Rate limited',
       };
       expect(isCaptchaError(error)).toBe(false);
+    });
+  });
+
+  describe('categorizeError', () => {
+    it('should categorize rate-limit errors', () => {
+      const error = new RateLimitError('Rate limited', {
+        retryAfter: 60,
+        protonCode: 2028,
+      });
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.RATE_LIMIT);
+      expect(categorized.retryable).toBe(false);
+      expect(categorized.userMessage).toContain('Rate limit');
+      expect(categorized.protonCode).toBe(2028);
+    });
+
+    it('should categorize CAPTCHA errors', () => {
+      const error = new CaptchaError({
+        captchaUrl: 'https://example.com/captcha',
+        captchaToken: 'token123',
+      });
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.CAPTCHA);
+      expect(categorized.retryable).toBe(false);
+      expect(categorized.userMessage).toContain('CAPTCHA');
+      expect(categorized.recoverySuggestion).toContain('proton-drive login');
+    });
+
+    it('should categorize 401 as auth error', () => {
+      const error = {
+        response: { status: 401, data: { Code: 1000 } },
+        message: 'Unauthorized',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.AUTH);
+      expect(categorized.retryable).toBe(false);
+      expect(categorized.httpStatus).toBe(401);
+      expect(categorized.recoverySuggestion).toContain('proton-drive login');
+    });
+
+    it('should categorize 404 as not found', () => {
+      const error = {
+        response: { status: 404 },
+        message: 'Not found',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.NOT_FOUND);
+      expect(categorized.retryable).toBe(false);
+      expect(categorized.httpStatus).toBe(404);
+    });
+
+    it('should categorize 5xx as server error (retryable)', () => {
+      const error = {
+        response: { status: 503 },
+        message: 'Service unavailable',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.SERVER);
+      expect(categorized.retryable).toBe(true);
+      expect(categorized.httpStatus).toBe(503);
+    });
+
+    it('should categorize 4xx as client error (not retryable)', () => {
+      const error = {
+        response: { status: 400 },
+        message: 'Bad request',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.CLIENT);
+      expect(categorized.retryable).toBe(false);
+      expect(categorized.httpStatus).toBe(400);
+    });
+
+    it('should categorize network errors as retryable', () => {
+      const error = {
+        code: 'ECONNRESET',
+        message: 'Connection reset',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.NETWORK);
+      expect(categorized.retryable).toBe(true);
+      expect(categorized.recoverySuggestion).toContain('internet connection');
+    });
+
+    it('should categorize ETIMEDOUT as network error', () => {
+      const error = {
+        code: 'ETIMEDOUT',
+        message: 'Timeout',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.NETWORK);
+      expect(categorized.retryable).toBe(true);
+    });
+
+    it('should categorize unknown errors', () => {
+      const error = new Error('Something went wrong');
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.UNKNOWN);
+      expect(categorized.retryable).toBe(false);
+      expect(categorized.message).toBe('Something went wrong');
+    });
+
+    it('should include protonCode when available', () => {
+      const error = {
+        response: { status: 500, data: { Code: 12345 } },
+        message: 'Server error',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.protonCode).toBe(12345);
+    });
+
+    it('should categorize permission denied (403 with permission keyword)', () => {
+      const error = {
+        response: { status: 403 },
+        message: 'Permission denied for this resource',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.PERMISSION);
+      expect(categorized.retryable).toBe(false);
+      expect(categorized.userMessage).toContain('Permission denied');
+    });
+
+    it('should treat 403 without permission keyword as auth error', () => {
+      const error = {
+        response: { status: 403 },
+        message: 'Forbidden',
+      };
+
+      const categorized = categorizeError(error);
+
+      expect(categorized.category).toBe(ErrorCategory.AUTH);
+      expect(categorized.retryable).toBe(false);
     });
   });
 });
