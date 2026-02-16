@@ -56,11 +56,11 @@ proton-drive credential remove -u your.email@proton.me
 
 ### pass-cli (Git LFS integration)
 
-When used through `proton-git-lfs`, the Go adapter resolves credentials via `pass-cli` and spawns `proton-drive-cli bridge` directly, passing credentials over stdin. Do not run `proton-drive login` manually in this mode.
+When used through `proton-git-lfs`, the Go adapter resolves credentials via `pass-cli` and spawns `proton-drive bridge` directly, passing credentials over stdin. Do not run `proton-drive login` manually in this mode.
 
 ```
 
-pass-cli → Go adapter → proton-drive-cli bridge (stdin, memory only)
+pass-cli → Go adapter → proton-drive bridge (stdin, memory only)
 
 ```
 
