@@ -7,6 +7,7 @@ End-to-end encrypted CLI for Proton Drive with Git LFS bridge support, powered b
 ## Documentation
 
 📚 **[Complete Documentation](https://sevenofnine-ai.github.io/proton-drive-cli/)** with:
+
 - **[TypeScript API Reference](https://sevenofnine-ai.github.io/proton-drive-cli/typescript/)** - Full TSDoc API documentation
 - **[Architecture & Guides](https://sevenofnine-ai.github.io/proton-drive-cli/guides/)** - Setup, security, operations
 
@@ -16,6 +17,7 @@ End-to-end encrypted CLI for Proton Drive with Git LFS bridge support, powered b
 corepack enable
 yarn install
 yarn build
+
 ```
 
 For local development, invoke the CLI directly with `node dist/index.js`.
@@ -29,20 +31,27 @@ Passwords are never accepted via CLI flags or environment variables. This preven
 Uses the system credential helper (macOS Keychain, Windows Credential Manager, Linux Secret Service) via `git credential fill`.
 
 ```bash
+
 # Store credentials in the system credential helper
+
 proton-drive credential store -u your.email@proton.me
 
 # Verify credentials are stored
+
 proton-drive credential verify
 
 # Login using stored credentials
+
 proton-drive login --credential-provider git
 
 # Use with any command
+
 proton-drive ls / --credential-provider git
 
 # Remove stored credentials
+
 proton-drive credential remove -u your.email@proton.me
+
 ```
 
 ### pass-cli (Git LFS integration)
@@ -50,7 +59,9 @@ proton-drive credential remove -u your.email@proton.me
 When used through `proton-git-lfs`, the Go adapter resolves credentials via `pass-cli` and spawns `proton-drive-cli bridge` directly, passing credentials over stdin. Do not run `proton-drive login` manually in this mode.
 
 ```
+
 pass-cli → Go adapter → proton-drive-cli bridge (stdin, memory only)
+
 ```
 
 ### Piped stdin (scripted usage)
@@ -60,6 +71,7 @@ For CI or scripted environments where git-credential is not available:
 ```bash
 printf '%s' 'password' | proton-drive login -u user@proton.me --password-stdin
 printf '%s' 'password' | proton-drive credential store -u user@proton.me --password-stdin
+
 ```
 
 ## Usage
@@ -67,17 +79,23 @@ printf '%s' 'password' | proton-drive credential store -u user@proton.me --passw
 ### Authentication
 
 ```bash
+
 # Login with git-credential (recommended)
+
 proton-drive login --credential-provider git
 
 # Login with piped password
+
 printf '%s' 'your-password' | proton-drive login -u your.email@proton.me --password-stdin
 
 # Check authentication status
+
 proton-drive status
 
 # Logout
+
 proton-drive logout
+
 ```
 
 Session tokens (no passwords) are stored in `~/.proton-drive-cli/session.json` with `0600` permissions. Tokens are refreshed automatically on HTTP 401 and Proton error code 9101.
@@ -87,32 +105,42 @@ Session tokens (no passwords) are stored in `~/.proton-drive-cli/session.json` w
 ### File Operations
 
 ```bash
+
 # List files
+
 proton-drive ls /
 proton-drive ls /Documents --long
 
 # Upload files
+
 proton-drive upload ./file.pdf /Documents
 cat data.json | proton-drive upload - /Documents --name data.json
 
 # Download files
+
 proton-drive download /Documents/file.pdf ./file.pdf
 
 # Create folders
+
 proton-drive mkdir /Documents Projects
 
 # Show file/folder metadata
+
 proton-drive info /Documents/file.pdf
 
 # Stream file contents to stdout
+
 proton-drive cat /Documents/file.txt
 
 # Move or rename files/folders
+
 proton-drive mv /Documents/old-name.pdf /Documents/new-name.pdf
 
 # Remove files/folders
+
 proton-drive rm /Documents/old-file.pdf
 proton-drive rm /Documents/old-file.pdf --permanent
+
 ```
 
 ### Global Options
@@ -125,7 +153,7 @@ proton-drive rm /Documents/old-file.pdf --permanent
 | `-v, --version`         | Display version number                            |
 | `--credential-provider` | Credential source: `git` or default (stdin)       |
 
-## Documentation
+## Developer Documentation
 
 See `docs/` for detailed documentation:
 
@@ -142,6 +170,7 @@ yarn test                        # Run all tests (fully mocked)
 yarn test --no-cache             # Without cache
 npx jest src/sdk/                # SDK adapter tests only
 npx jest src/cli/e2e.test        # E2E CLI tests
+
 ```
 
 All tests are fully mocked and CI-safe — no Proton credentials required.
