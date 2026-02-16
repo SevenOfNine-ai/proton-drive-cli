@@ -158,7 +158,9 @@ describe('HTTPClientAdapter', () => {
         timeoutMs: 30000,
       });
 
-      expect(headers.get('x-pm-appversion')).toBe('ProtonGitLFS_CLI_0.1.1');
+      // Expect official Proton Drive app version (platform-specific)
+      const appVersion = headers.get('x-pm-appversion');
+      expect(appVersion).toMatch(/^(macos-drive@2\.10\.1|windows-drive@1\.12\.4)$/);
     });
 
     it('preserves existing x-pm-appversion', async () => {
