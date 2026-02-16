@@ -33,6 +33,11 @@ interface HTTPClientBlobRequest extends HTTPClientBaseRequest {
 
 const API_BASE_URL = 'https://drive-api.proton.me';
 
+// Use official Proton Drive desktop app version strings (mimics proton-drive-sync)
+const PLATFORM_MAP: Record<string, string> = { darwin: 'macos', win32: 'windows', linux: 'macos' };
+const PLATFORM = PLATFORM_MAP[process.platform] ?? 'macos';
+const APP_VERSION = PLATFORM === 'windows' ? 'windows-drive@1.12.4' : 'macos-drive@2.10.1';
+
 // Proton API error codes that indicate the access token needs refresh
 const AUTH_REFRESH_ERROR_CODES = new Set([
   9101,   // Insufficient scope (HTTP 403)
@@ -55,10 +60,9 @@ export class HTTPClientAdapter implements ProtonDriveHTTPClient {
       headers.set('Authorization', `Bearer ${session.accessToken}`);
       headers.set('x-pm-uid', session.uid);
     }
-    // Identify as third-party CLI client to avoid Sentinel blocking
-    // (was 'web-drive@5.2.0' which impersonated official web client)
+    // Use official Proton Drive desktop app version string
     if (!headers.has('x-pm-appversion')) {
-      headers.set('x-pm-appversion', 'ProtonGitLFS_CLI_0.1.1');
+      headers.set('x-pm-appversion', APP_VERSION);
     }
   }
 

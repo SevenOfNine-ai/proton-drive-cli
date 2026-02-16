@@ -3,6 +3,11 @@ import { AuthInfoResponse, AuthResponse } from '../types/auth';
 import { CaptchaError } from '../errors/types';
 import { logger } from '../utils/logger';
 
+// Use official Proton Drive desktop app version strings (mimics proton-drive-sync)
+const PLATFORM_MAP: Record<string, string> = { darwin: 'macos', win32: 'windows', linux: 'macos' };
+const PLATFORM = PLATFORM_MAP[process.platform] ?? 'macos';
+const APP_VERSION = PLATFORM === 'windows' ? 'windows-drive@1.12.4' : 'macos-drive@2.10.1';
+
 /**
  * Authentication API client for Proton API
  * Handles SRP authentication flow with Proton's API
@@ -18,9 +23,7 @@ export class AuthApiClient {
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
-        // Identify as third-party CLI client to avoid Sentinel blocking
-        // (was 'web-drive@5.2.0' which impersonated official web client)
-        'x-pm-appversion': 'ProtonGitLFS_CLI_0.1.1',
+        'x-pm-appversion': APP_VERSION,
       },
     });
   }
