@@ -33,7 +33,7 @@
     "docs:serve": "npx http-server docs/api -p 8080"
   },
   "bin": {
-    "proton-drive": "./dist/index.js"
+    "proton-drive-cli": "./dist/index.js"
   },
   "files": [
     "dist/**/*",

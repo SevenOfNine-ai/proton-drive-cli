@@ -34,33 +34,33 @@ Uses the system credential helper (macOS Keychain, Windows Credential Manager, L
 
 # Store credentials in the system credential helper
 
-proton-drive credential store -u your.email@proton.me
+proton-drive-clicredential store -u your.email@proton.me
 
 # Verify credentials are stored
 
-proton-drive credential verify
+proton-drive-clicredential verify
 
 # Login using stored credentials
 
-proton-drive login --credential-provider git
+proton-drive-clilogin --credential-provider git
 
 # Use with any command
 
-proton-drive ls / --credential-provider git
+proton-drive-clils / --credential-provider git
 
 # Remove stored credentials
 
-proton-drive credential remove -u your.email@proton.me
+proton-drive-clicredential remove -u your.email@proton.me
 
 ```
 
 ### pass-cli (Git LFS integration)
 
-When used through `proton-git-lfs`, the Go adapter resolves credentials via `pass-cli` and spawns `proton-drive bridge` directly, passing credentials over stdin. Do not run `proton-drive login` manually in this mode.
+When used through `proton-git-lfs`, the Go adapter resolves credentials via `pass-cli` and spawns `proton-drive-clibridge` directly, passing credentials over stdin. Do not run `proton-drive-clilogin` manually in this mode.
 
 ```
 
-pass-cli → Go adapter → proton-drive bridge (stdin, memory only)
+pass-cli → Go adapter → proton-drive-clibridge (stdin, memory only)
 
 ```
 
@@ -69,8 +69,8 @@ pass-cli → Go adapter → proton-drive bridge (stdin, memory only)
 For CI or scripted environments where git-credential is not available:
 
 ```bash
-printf '%s' 'password' | proton-drive login -u user@proton.me --password-stdin
-printf '%s' 'password' | proton-drive credential store -u user@proton.me --password-stdin
+printf '%s' 'password' | proton-drive-clilogin -u user@proton.me --password-stdin
+printf '%s' 'password' | proton-drive-clicredential store -u user@proton.me --password-stdin
 
 ```
 
@@ -82,19 +82,19 @@ printf '%s' 'password' | proton-drive credential store -u user@proton.me --passw
 
 # Login with git-credential (recommended)
 
-proton-drive login --credential-provider git
+proton-drive-clilogin --credential-provider git
 
 # Login with piped password
 
-printf '%s' 'your-password' | proton-drive login -u your.email@proton.me --password-stdin
+printf '%s' 'your-password' | proton-drive-clilogin -u your.email@proton.me --password-stdin
 
 # Check authentication status
 
-proton-drive status
+proton-drive-clistatus
 
 # Logout
 
-proton-drive logout
+proton-drive-clilogout
 
 ```
 
@@ -108,38 +108,38 @@ Session tokens (no passwords) are stored in `~/.proton-drive-cli/session.json` w
 
 # List files
 
-proton-drive ls /
-proton-drive ls /Documents --long
+proton-drive-clils /
+proton-drive-clils /Documents --long
 
 # Upload files
 
-proton-drive upload ./file.pdf /Documents
-cat data.json | proton-drive upload - /Documents --name data.json
+proton-drive-cliupload ./file.pdf /Documents
+cat data.json | proton-drive-cliupload - /Documents --name data.json
 
 # Download files
 
-proton-drive download /Documents/file.pdf ./file.pdf
+proton-drive-clidownload /Documents/file.pdf ./file.pdf
 
 # Create folders
 
-proton-drive mkdir /Documents Projects
+proton-drive-climkdir /Documents Projects
 
 # Show file/folder metadata
 
-proton-drive info /Documents/file.pdf
+proton-drive-cliinfo /Documents/file.pdf
 
 # Stream file contents to stdout
 
-proton-drive cat /Documents/file.txt
+proton-drive-clicat /Documents/file.txt
 
 # Move or rename files/folders
 
-proton-drive mv /Documents/old-name.pdf /Documents/new-name.pdf
+proton-drive-climv /Documents/old-name.pdf /Documents/new-name.pdf
 
 # Remove files/folders
 
-proton-drive rm /Documents/old-file.pdf
-proton-drive rm /Documents/old-file.pdf --permanent
+proton-drive-clirm /Documents/old-file.pdf
+proton-drive-clirm /Documents/old-file.pdf --permanent
 
 ```
 
