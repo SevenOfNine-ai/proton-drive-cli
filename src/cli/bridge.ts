@@ -34,6 +34,7 @@ import {
   oidToPath,
 } from '../bridge/validators';
 import { createProvider, normalizeProviderName } from '../credentials';
+import { ChangeTokenCache } from '../drive/change-tokens';
 
 /**
  * Write JSON response to stdout (single line, no extra output)
@@ -253,6 +254,9 @@ async function handleAuthCommand(request: BridgeRequest): Promise<void> {
   }
 }
 
+// Singleton change token cache instance
+const changeTokenCache = new ChangeTokenCache();
+
 async function handleUploadCommand(request: BridgeRequest): Promise<void> {
   const { oid, path: filePath, storageBase = 'LFS' } = request;
 
@@ -265,6 +269,22 @@ async function handleUploadCommand(request: BridgeRequest): Promise<void> {
     validateOid(oid);
     validateLocalPath(filePath);
     await fs.access(filePath);
+
+    // Check if upload is needed based on change token
+    const shouldUpload = await changeTokenCache.shouldUpload(oid, filePath);
+    if (!shouldUpload) {
+      logger.info(`Upload skipped for ${oid} (unchanged since last upload)`);
+      // Get file stats for response (file hasn't changed, so use cached size)
+      const stat = await fs.stat(filePath);
+      writeSuccess({
+        oid,
+        fileId: 'cached', // Placeholder - actual fileId not needed for skipped uploads
+        revisionId: '',
+        uploaded: false,
+        cached: true,
+      });
+      return;
+    }
 
     const client = await getInitializedClient(request);
     await ensureBaseDir(client, storageBase);
@@ -296,11 +316,16 @@ async function handleUploadCommand(request: BridgeRequest): Promise<void> {
     const ctrl = await uploader.uploadFromStream(webStream, []);
     const { nodeUid } = await ctrl.completion();
 
+    // Record successful upload in change token cache
+    await changeTokenCache.recordUpload(oid, filePath);
+    await changeTokenCache.save();
+
     writeSuccess({
       oid,
       fileId: nodeUid,
       revisionId: '', // SDK doesn't expose revision ID in the same way
       uploaded: true,
+      cached: false,
     });
   } catch (error: any) {
     handleBridgeError(error, 'Upload failed');
