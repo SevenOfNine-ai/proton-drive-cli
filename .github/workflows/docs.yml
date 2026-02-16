@@ -53,8 +53,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: true
+
+      - name: Checkout SDK submodule (non-recursive)
+        run: |
+          git submodule update --init --depth 1 submodules/sdk
+          cd submodules/sdk && git submodule update --init --depth 1 js/sdk
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
