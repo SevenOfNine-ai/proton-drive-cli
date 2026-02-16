@@ -70,6 +70,12 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      - name: Build SDK
+        run: |
+          cd submodules/sdk/js/sdk
+          npm install
+          npm run build
+
       - name: Generate TypeDoc API documentation
         run: yarn docs
 
