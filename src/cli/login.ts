@@ -466,7 +466,8 @@ export function createStatusCommand(): Command {
  * # Output: (error details if refresh fails)
  *
  * # Use in system tray heartbeat (every 5 minutes)
- * */5 * * * * /usr/local/bin/proton-drive session refresh
+ * # Cron: Run every 5 minutes
+ * 5 * * * * /usr/local/bin/proton-drive session refresh
  * ```
  *
  * @example
