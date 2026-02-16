@@ -73,8 +73,9 @@ jobs:
       - name: Build SDK
         run: |
           cd submodules/sdk/js/sdk
-          npm install
-          npm run build
+          corepack enable
+          yarn install
+          yarn build
 
       - name: Generate TypeDoc API documentation
         run: yarn docs
