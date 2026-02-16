@@ -148,6 +148,39 @@ describe('CircuitBreaker', () => {
       expect(result2).toBe('success');
       expect(breaker.getState()).toBe(CircuitState.CLOSED);
     });
+
+    it('should reopen circuit if half-open max attempts exceeded', async () => {
+      // Create a custom breaker with halfOpenMaxAttempts: 1
+      const customBreaker = new CircuitBreaker('test-limit', {
+        failureThreshold: 2,
+        resetTimeoutMs: 500,
+        halfOpenMaxAttempts: 1,
+      });
+
+      // Trip the circuit
+      const failOp = jest.fn().mockRejectedValue(new Error('fail'));
+      await expect(customBreaker.execute(failOp)).rejects.toThrow();
+      await expect(customBreaker.execute(failOp)).rejects.toThrow();
+      expect(customBreaker.getState()).toBe(CircuitState.OPEN);
+
+      // Wait for reset timeout and transition to half-open
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // First attempt in half-open succeeds
+      const succeedOp = jest.fn().mockResolvedValue('ok');
+      await customBreaker.execute(succeedOp);
+      expect(customBreaker.getState()).toBe(CircuitState.HALF_OPEN);
+
+      // Second attempt exceeds halfOpenMaxAttempts (1), should reopen with "Recovery test failed"
+      try {
+        await customBreaker.execute(succeedOp);
+        fail('Should have thrown CircuitBreakerError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(CircuitBreakerError);
+        expect((error as Error).message).toContain('Recovery test failed');
+      }
+      expect(customBreaker.getState()).toBe(CircuitState.OPEN);
+    });
   });
 
   describe('reset', () => {

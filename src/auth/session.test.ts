@@ -2,6 +2,7 @@
  * Tests for session management with proactive refresh, validation, and file locking
  */
 
+// @ts-nocheck - Mock typing issues with fs-extra overloads
 import { SessionManager } from './session';
 import { SessionCredentials } from '../types/auth';
 import * as fs from 'fs-extra';

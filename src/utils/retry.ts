@@ -142,7 +142,7 @@ export async function retryWithBackoff<T>(
 
       // NEVER retry permanent errors (4xx client errors)
       if (isPermanentError(error)) {
-        logger.debug(`${context} failed with permanent error (${error?.response?.status}), not retrying`);
+        logger.debug(`${context} failed with permanent error (${(error as any)?.response?.status}), not retrying`);
         throw error;
       }
 

@@ -187,6 +187,45 @@ describe('ChangeTokenCache', () => {
 
       expect(result).toBe(true);
     });
+
+    it('should handle non-ENOENT stat errors gracefully', async () => {
+      jest.spyOn(fs, 'readFile').// @ts-expect-error Mock return value
+      mockResolvedValue('{}' as any);
+      const permError: any = new Error('Permission denied');
+      permError.code = 'EACCES';
+      jest.spyOn(fs, 'stat').// @ts-expect-error Mock error value
+      mockRejectedValue(permError);
+
+      // Should require upload when stat fails for other reasons
+      const result = await cache.shouldUpload('abc123', '/path/to/file');
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle corrupted cache file during load', async () => {
+      const corruptedError: any = new Error('Invalid JSON');
+      corruptedError.code = 'EINVAL';
+      jest.spyOn(fs, 'readFile').// @ts-expect-error Mock error value
+      mockRejectedValue(corruptedError);
+
+      // Should not throw, just initialize empty cache
+      await expect(cache.load()).resolves.not.toThrow();
+      const stats = cache.getStats();
+      expect(stats.totalEntries).toBe(0);
+    });
+
+    it('should handle save failures gracefully', async () => {
+      jest.spyOn(fs, 'ensureDir').// @ts-expect-error Mock return value
+      mockResolvedValue(undefined as any);
+      const writeError = new Error('Disk full');
+      jest.spyOn(fs, 'writeFile').// @ts-expect-error Mock error value
+      mockRejectedValue(writeError);
+
+      // Should not throw, just log warning
+      await expect(cache.save()).resolves.not.toThrow();
+    });
   });
 
   describe('recordUpload', () => {

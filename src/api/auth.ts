@@ -143,7 +143,7 @@ export class AuthApiClient {
   async refreshToken(
     uid: string,
     refreshToken: string
-  ): Promise<{ AccessToken: string; RefreshToken: string }> {
+  ): Promise<{ AccessToken: string; RefreshToken: string; ExpiresIn?: number }> {
     const response = await this.client.post('/auth/v4/refresh', {
       UID: uid,
       RefreshToken: refreshToken,

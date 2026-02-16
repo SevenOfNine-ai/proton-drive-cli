@@ -139,6 +139,65 @@ describe('retry utility', () => {
       ).rejects.toThrow('Network error');
 
       expect(operation).toHaveBeenCalledTimes(5);
+    }, 10000); // 10 second timeout (test waits ~7s total)
+
+    it('should retry custom error names in retryableErrors set', async () => {
+      const customError = new Error('Custom error');
+      customError.name = 'CustomNetworkError';
+      const operation = jest.fn()
+        .mockRejectedValueOnce(customError)
+        .mockResolvedValueOnce('success');
+
+      const config = createRetryConfig({
+        retryableErrors: new Set(['CustomNetworkError']),
+        initialDelayMs: 10,
+      });
+
+      const result = await retryWithBackoff(operation, config, 'test op');
+
+      expect(result).toBe('success');
+      expect(operation).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry custom error codes in retryableErrors set', async () => {
+      const customError = Object.assign(new Error('Custom code error'), { code: 'CUSTOM_CODE' });
+      const operation = jest.fn()
+        .mockRejectedValueOnce(customError)
+        .mockResolvedValueOnce('success');
+
+      const config = createRetryConfig({
+        retryableErrors: new Set(['CUSTOM_CODE']),
+        initialDelayMs: 10,
+      });
+
+      const result = await retryWithBackoff(operation, config, 'test op');
+
+      expect(result).toBe('success');
+      expect(operation).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry ENOTFOUND network errors', async () => {
+      const notFoundError = Object.assign(new Error('DNS lookup failed'), { code: 'ENOTFOUND' });
+      const operation = jest.fn()
+        .mockRejectedValueOnce(notFoundError)
+        .mockResolvedValueOnce('success');
+
+      const result = await retryWithBackoff(operation, DEFAULT_RETRY_CONFIG, 'test op');
+
+      expect(result).toBe('success');
+      expect(operation).toHaveBeenCalledTimes(2);
+    });
+
+    it('should NOT retry errors not in retryable list', async () => {
+      const customError = new Error('UnknownError');
+      customError.name = 'UnknownError';
+      const operation = jest.fn().mockRejectedValue(customError);
+
+      await expect(
+        retryWithBackoff(operation, DEFAULT_RETRY_CONFIG, 'test op')
+      ).rejects.toThrow('UnknownError');
+
+      expect(operation).toHaveBeenCalledTimes(1); // No retry
     });
   });
 

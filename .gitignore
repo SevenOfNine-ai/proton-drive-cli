@@ -5,6 +5,7 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+coverage/
 
 # Yarn 4
 .yarn/*
