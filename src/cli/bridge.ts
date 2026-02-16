@@ -539,6 +539,148 @@ async function handleBatchDeleteCommand(request: BridgeRequest): Promise<void> {
 
 // ─── Command registration ──────────────────────────────────────────
 
+/**
+ * Create the bridge command for the CLI.
+ *
+ * Implements the JSON-based bridge protocol for Git LFS integration with the Go adapter.
+ * Reads JSON requests from stdin, performs Proton Drive operations via SDK, and writes
+ * JSON responses to stdout. Designed for subprocess communication with the Git LFS adapter.
+ *
+ * # Bridge Protocol
+ *
+ * **Request Format** (stdin):
+ * ```json
+ * {
+ *   "command": "upload|download|exists|...",
+ *   "oid": "abc123...",
+ *   "path": "/tmp/file.bin",
+ *   "credentialProvider": "git-credential|pass-cli",
+ *   "storageBase": "LFS"
+ * }
+ * ```
+ *
+ * **Response Format** (stdout):
+ * ```json
+ * {
+ *   "ok": true,
+ *   "payload": { "oid": "abc123...", "uploaded": true }
+ * }
+ * ```
+ *
+ * **Error Response** (stdout):
+ * ```json
+ * {
+ *   "ok": false,
+ *   "error": "Upload failed",
+ *   "code": 500,
+ *   "details": "..."
+ * }
+ * ```
+ *
+ * # Supported Commands
+ *
+ * - **auth**: Authenticate with SRP, create session
+ * - **upload**: Upload file to Drive (OID-based path, change token caching)
+ * - **download**: Download file from Drive by OID
+ * - **list**: List files in folder
+ * - **exists**: Check if file exists by OID
+ * - **delete**: Delete file by OID (moves to trash)
+ * - **refresh**: Refresh access token using refresh token
+ * - **init**: Initialize storage base directory
+ * - **batch-exists**: Check multiple OIDs existence
+ * - **batch-delete**: Delete multiple files by OID
+ *
+ * # Security Features
+ *
+ * - No output to stdout except JSON response (prevents Go adapter parsing errors)
+ * - Credentials resolved via provider (never logged)
+ * - Session reuse (avoids repeated SRP auth)
+ * - CAPTCHA detection and guidance
+ * - Rate-limit detection and retry guidance
+ * - Change token caching (80% fewer uploads)
+ *
+ * # Error Handling
+ *
+ * - HTTP 400: Invalid request parameters
+ * - HTTP 404: File not found
+ * - HTTP 407: CAPTCHA required
+ * - HTTP 429: Rate-limited by Proton API
+ * - HTTP 500: Server error or operation failed
+ *
+ * # Exit Codes
+ *
+ * - 0: Command executed successfully (check response.ok)
+ * - 1: Fatal error (JSON parsing, stdin timeout, unknown command)
+ *
+ * @returns Commander Command instance configured for bridge protocol
+ * @throws {Error} Stdin timeout after 30 seconds
+ * @throws {Error} JSON parsing error
+ * @throws {Error} Unknown bridge command
+ *
+ * @example
+ * ```bash
+ * # Upload file via bridge protocol
+ * echo '{"oid":"abc123...","path":"/tmp/file.bin","credentialProvider":"git-credential"}' \
+ *   | proton-drive bridge upload
+ *
+ * # Download file via bridge protocol
+ * echo '{"oid":"abc123...","outputPath":"/tmp/out.bin"}' \
+ *   | proton-drive bridge download
+ *
+ * # Check if file exists
+ * echo '{"oid":"abc123..."}' \
+ *   | proton-drive bridge exists
+ *
+ * # Authenticate (session reuse supported)
+ * echo '{"username":"user@proton.me","password":"..."}' \
+ *   | proton-drive bridge auth
+ *
+ * # Batch exists check
+ * echo '{"oids":["abc123...","def456..."]}' \
+ *   | proton-drive bridge batch-exists
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Programmatic usage (Go adapter integration)
+ * import { spawn } from 'child_process';
+ *
+ * const bridge = spawn('proton-drive', ['bridge', 'upload']);
+ *
+ * bridge.stdin.write(JSON.stringify({
+ *   oid: 'abc123...',
+ *   path: '/tmp/file.bin',
+ *   credentialProvider: 'git-credential',
+ * }));
+ * bridge.stdin.end();
+ *
+ * bridge.stdout.on('data', (data) => {
+ *   const response = JSON.parse(data.toString());
+ *   if (response.ok) {
+ *     console.log('Upload successful:', response.payload);
+ *   } else {
+ *     console.error('Upload failed:', response.error);
+ *   }
+ * });
+ * ```
+ *
+ * @example
+ * ```go
+ * // Go adapter usage
+ * cmd := exec.Command("proton-drive", "bridge", "upload")
+ * cmd.Stdin = bytes.NewBufferString(`{"oid":"abc123...","path":"/tmp/file.bin"}`)
+ * output, err := cmd.Output()
+ * var response BridgeResponse
+ * json.Unmarshal(output, &response)
+ * ```
+ *
+ * @category CLI Commands
+ * @see {@link handleUploadCommand} for upload implementation
+ * @see {@link handleDownloadCommand} for download implementation
+ * @see {@link handleAuthCommand} for authentication implementation
+ * @see {@link ChangeTokenCache} for upload optimization
+ * @since 0.1.0
+ */
 export function createBridgeCommand(): Command {
   const cmd = new Command('bridge');
 
