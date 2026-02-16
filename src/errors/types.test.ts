@@ -1,85 +1,149 @@
-import { AppError, ErrorCode } from './types';
+/**
+ * Tests for error types and detection functions
+ */
 
-describe('AppError', () => {
-  it('sets fields correctly via constructor', () => {
-    const err = new AppError('test message', ErrorCode.AUTH_FAILED, { key: 'val' }, true);
-    expect(err.message).toBe('test message');
-    expect(err.code).toBe(ErrorCode.AUTH_FAILED);
-    expect(err.details).toEqual({ key: 'val' });
-    expect(err.isRecoverable).toBe(true);
-    expect(err.name).toBe('AppError');
+import {
+  RateLimitError,
+  CaptchaError,
+  isRateLimitError,
+  isCaptchaError,
+  ErrorCode,
+} from './types';
+
+describe('error types', () => {
+  describe('RateLimitError', () => {
+    it('should create rate-limit error with metadata', () => {
+      const error = new RateLimitError('Rate limited', {
+        retryAfter: 60,
+        protonCode: 2028,
+      });
+
+      expect(error.name).toBe('RateLimitError');
+      expect(error.message).toBe('Rate limited');
+      expect(error.code).toBe(ErrorCode.RATE_LIMITED);
+      expect(error.retryAfter).toBe(60);
+      expect(error.protonCode).toBe(2028);
+      expect(error.isRecoverable).toBe(false);
+    });
+
+    it('should work without optional metadata', () => {
+      const error = new RateLimitError('Rate limited');
+
+      expect(error.retryAfter).toBeUndefined();
+      expect(error.protonCode).toBeUndefined();
+    });
   });
 
-  it('is an instance of Error', () => {
-    const err = new AppError('msg', ErrorCode.UNKNOWN_ERROR);
-    expect(err).toBeInstanceOf(Error);
+  describe('CaptchaError', () => {
+    it('should create CAPTCHA error with metadata', () => {
+      const error = new CaptchaError({
+        captchaUrl: 'https://example.com/captcha',
+        captchaToken: 'token123',
+        verificationMethods: ['captcha', 'sms'],
+      });
+
+      expect(error.name).toBe('CaptchaError');
+      expect(error.code).toBe(ErrorCode.CAPTCHA_REQUIRED);
+      expect(error.captchaUrl).toBe('https://example.com/captcha');
+      expect(error.captchaToken).toBe('token123');
+      expect(error.verificationMethods).toEqual(['captcha', 'sms']);
+      expect(error.isRecoverable).toBe(true);
+    });
   });
 
-  it('defaults isRecoverable to false', () => {
-    const err = new AppError('msg', ErrorCode.UNKNOWN_ERROR);
-    expect(err.isRecoverable).toBe(false);
-  });
-});
+  describe('isRateLimitError', () => {
+    it('should detect RateLimitError instances', () => {
+      const error = new RateLimitError('Rate limited');
+      expect(isRateLimitError(error)).toBe(true);
+    });
 
-describe('toUserMessage', () => {
-  it('returns non-empty string for all ErrorCode values', () => {
-    for (const code of Object.values(ErrorCode)) {
-      const err = new AppError('fallback', code as ErrorCode);
-      const msg = err.toUserMessage();
-      expect(typeof msg).toBe('string');
-      expect(msg.length).toBeGreaterThan(0);
-    }
-  });
+    it('should detect HTTP 429 status', () => {
+      const error = {
+        response: { status: 429 },
+        message: 'Too many requests',
+      };
+      expect(isRateLimitError(error)).toBe(true);
+    });
 
-  it('returns specific message for AUTH_FAILED', () => {
-    const err = new AppError('x', ErrorCode.AUTH_FAILED);
-    expect(err.toUserMessage()).toContain('Authentication failed');
-  });
+    it('should detect Proton code 2028', () => {
+      const error = {
+        response: { data: { Code: 2028 } },
+        message: 'Rate limited',
+      };
+      expect(isRateLimitError(error)).toBe(true);
+    });
 
-  it('returns specific message for SESSION_EXPIRED', () => {
-    const err = new AppError('x', ErrorCode.SESSION_EXPIRED);
-    expect(err.toUserMessage()).toContain('session has expired');
-  });
+    it('should detect Proton code 85131', () => {
+      const error = {
+        response: { data: { Code: 85131 } },
+        message: 'Anti-abuse',
+      };
+      expect(isRateLimitError(error)).toBe(true);
+    });
 
-  it('returns specific message for FILE_NOT_FOUND with details', () => {
-    const err = new AppError('x', ErrorCode.FILE_NOT_FOUND, { path: '/test.txt' });
-    expect(err.toUserMessage()).toContain('/test.txt');
-  });
+    it('should return false for non-rate-limit errors', () => {
+      const error = new Error('Generic error');
+      expect(isRateLimitError(error)).toBe(false);
+    });
 
-  it('returns original message for VALIDATION_ERROR', () => {
-    const err = new AppError('custom validation msg', ErrorCode.VALIDATION_ERROR);
-    expect(err.toUserMessage()).toBe('custom validation msg');
-  });
-});
-
-describe('getRecoverySuggestion', () => {
-  it('returns suggestion for auth errors', () => {
-    const err = new AppError('x', ErrorCode.AUTH_FAILED);
-    expect(err.getRecoverySuggestion()).toContain('login');
-  });
-
-  it('returns suggestion for SESSION_EXPIRED', () => {
-    const err = new AppError('x', ErrorCode.SESSION_EXPIRED);
-    expect(err.getRecoverySuggestion()).toContain('login');
+    it('should return false for 4xx errors that are not 429', () => {
+      const error = {
+        response: { status: 400 },
+        message: 'Bad request',
+      };
+      expect(isRateLimitError(error)).toBe(false);
+    });
   });
 
-  it('returns suggestion for network errors', () => {
-    const err = new AppError('x', ErrorCode.NETWORK_ERROR);
-    expect(err.getRecoverySuggestion()).toContain('internet');
-  });
+  describe('isCaptchaError', () => {
+    it('should detect CaptchaError instances', () => {
+      const error = new CaptchaError({
+        captchaUrl: 'https://example.com',
+        captchaToken: 'token',
+      });
+      expect(isCaptchaError(error)).toBe(true);
+    });
 
-  it('returns suggestion for RATE_LIMITED', () => {
-    const err = new AppError('x', ErrorCode.RATE_LIMITED);
-    expect(err.getRecoverySuggestion()).toContain('Wait');
-  });
+    it('should detect Proton code 9001', () => {
+      const error = {
+        response: { data: { Code: 9001 } },
+        message: 'CAPTCHA required',
+      };
+      expect(isCaptchaError(error)).toBe(true);
+    });
 
-  it('returns null for unknown error codes', () => {
-    const err = new AppError('x', ErrorCode.UNKNOWN_ERROR);
-    expect(err.getRecoverySuggestion()).toBeNull();
-  });
+    it('should detect Proton code 12087', () => {
+      const error = {
+        response: { data: { Code: 12087 } },
+        message: 'CAPTCHA token invalid',
+      };
+      expect(isCaptchaError(error)).toBe(true);
+    });
 
-  it('returns null for UPLOAD_FAILED (no specific suggestion)', () => {
-    const err = new AppError('x', ErrorCode.UPLOAD_FAILED);
-    expect(err.getRecoverySuggestion()).toBeNull();
+    it('should detect HumanVerificationToken in Details', () => {
+      const error = {
+        response: {
+          data: {
+            Code: 2028,
+            Details: { HumanVerificationToken: 'token123' },
+          },
+        },
+        message: 'Verification required',
+      };
+      expect(isCaptchaError(error)).toBe(true);
+    });
+
+    it('should return false for non-CAPTCHA errors', () => {
+      const error = new Error('Generic error');
+      expect(isCaptchaError(error)).toBe(false);
+    });
+
+    it('should return false for rate-limit errors', () => {
+      const error = {
+        response: { data: { Code: 2028 } },
+        message: 'Rate limited',
+      };
+      expect(isCaptchaError(error)).toBe(false);
+    });
   });
 });

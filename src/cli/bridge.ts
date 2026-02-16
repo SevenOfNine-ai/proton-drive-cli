@@ -17,7 +17,7 @@ import { createSDKClient } from '../sdk/client';
 import { ensureFolderPath } from '../sdk/pathResolver';
 import { AuthService } from '../auth';
 import { SessionManager } from '../auth/session';
-import { AppError, ErrorCode, CaptchaError } from '../errors/types';
+import { AppError, ErrorCode, CaptchaError, RateLimitError, isRateLimitError, isCaptchaError } from '../errors/types';
 import { logger, LogLevel } from '../utils/logger';
 import {
   ensureOidFolder,
@@ -48,6 +48,38 @@ function writeSuccess(payload: any = {}): void {
 
 function writeError(message: string, code: number = 500, details: string = ''): void {
   writeResponse({ ok: false, error: message, code, details });
+}
+
+/**
+ * Centralized error handler for bridge commands.
+ * Detects CAPTCHA and rate-limit errors and formats appropriate responses.
+ */
+function handleBridgeError(error: any, fallbackMessage: string = 'Operation failed'): void {
+  // CAPTCHA required (use centralized detection)
+  if (isCaptchaError(error)) {
+    if (error instanceof CaptchaError) {
+      writeResponse(formatCaptchaError(error));
+    } else {
+      writeError('CAPTCHA verification required — run: proton-drive login', 407);
+    }
+    return;
+  }
+
+  // Rate-limit (use centralized detection)
+  if (isRateLimitError(error)) {
+    const retryAfter = (error as any).retryAfter;
+    const message = retryAfter
+      ? `Rate limited by Proton API — wait ${retryAfter}s and retry`
+      : 'Rate limited by Proton API — wait and retry';
+    writeError(message, 429);
+    return;
+  }
+
+  // Generic error
+  writeError(
+    error.message || fallbackMessage,
+    errorToStatusCode(error)
+  );
 }
 
 /**
@@ -194,25 +226,23 @@ async function handleAuthCommand(request: BridgeRequest): Promise<void> {
     await authService.login(resolved.username, resolved.password, undefined);
     writeSuccess({ authenticated: true });
   } catch (error: any) {
-    // CAPTCHA required (Proton API code 9001)
-    if (error instanceof CaptchaError) {
-      writeResponse(formatCaptchaError(error));
+    // CAPTCHA required (use centralized detection)
+    if (isCaptchaError(error)) {
+      if (error instanceof CaptchaError) {
+        writeResponse(formatCaptchaError(error));
+      } else {
+        writeError('CAPTCHA verification required — run: proton-drive login', 407);
+      }
       return;
     }
 
-    // Invalid/expired CAPTCHA token (Proton API code 12087)
-    if (error?.response?.data?.Code === 12087) {
-      writeError('CAPTCHA token invalid or expired — run: proton-drive login', 407);
-      return;
-    }
-
-    // Abuse rate-limit (Proton API code 2028 / HTTP 422)
-    if (error instanceof AppError && error.code === ErrorCode.RATE_LIMITED) {
-      writeError('rate limited by Proton API — wait and retry', 429);
-      return;
-    }
-    if (error?.response?.data?.Code === 2028) {
-      writeError('rate limited by Proton API — wait and retry', 429);
+    // Rate-limit (use centralized detection)
+    if (isRateLimitError(error)) {
+      const retryAfter = (error as any).retryAfter;
+      const message = retryAfter
+        ? `Rate limited by Proton API — wait ${retryAfter}s and retry`
+        : 'Rate limited by Proton API — wait and retry';
+      writeError(message, 429);
       return;
     }
 
@@ -273,10 +303,7 @@ async function handleUploadCommand(request: BridgeRequest): Promise<void> {
       uploaded: true,
     });
   } catch (error: any) {
-    writeError(
-      error.message || 'Upload failed',
-      errorToStatusCode(error)
-    );
+    handleBridgeError(error, 'Upload failed');
   }
 }
 
@@ -317,10 +344,7 @@ async function handleDownloadCommand(request: BridgeRequest): Promise<void> {
       downloaded: true,
     });
   } catch (error: any) {
-    writeError(
-      error.message || 'Download failed',
-      errorToStatusCode(error)
-    );
+    handleBridgeError(error, 'Download failed');
   }
 }
 

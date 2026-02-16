@@ -204,3 +204,64 @@ export class CaptchaError extends AppError {
     this.verificationMethods = options.verificationMethods || [];
   }
 }
+
+/**
+ * Rate-limit error with retry timing information
+ */
+export class RateLimitError extends AppError {
+  public readonly retryAfter?: number; // seconds until retry allowed
+  public readonly protonCode?: number; // Proton-specific error code
+
+  constructor(
+    message: string,
+    options?: {
+      retryAfter?: number;
+      protonCode?: number;
+    }
+  ) {
+    super(message, ErrorCode.RATE_LIMITED, {
+      retryAfter: options?.retryAfter,
+      protonCode: options?.protonCode,
+    }, false); // Not recoverable by retry
+    this.name = 'RateLimitError';
+    this.retryAfter = options?.retryAfter;
+    this.protonCode = options?.protonCode;
+  }
+}
+
+/**
+ * Detect if an error is a rate-limit error from Proton API
+ * @param error - Error object to check
+ * @returns True if rate-limit error (code 2028, 85131, or HTTP 429)
+ */
+export function isRateLimitError(error: any): error is RateLimitError {
+  if (error instanceof RateLimitError) return true;
+
+  // Check Proton-specific error codes
+  const protonCode = error?.response?.data?.Code;
+  if (protonCode === 2028 || protonCode === 85131) return true;
+
+  // Check HTTP 429 status
+  if (error?.response?.status === 429) return true;
+
+  return false;
+}
+
+/**
+ * Detect if an error is a CAPTCHA error from Proton API
+ * @param error - Error object to check
+ * @returns True if CAPTCHA error (codes 9001, 12087, or Details.HumanVerificationToken present)
+ */
+export function isCaptchaError(error: any): error is CaptchaError {
+  if (error instanceof CaptchaError) return true;
+
+  // Check Proton CAPTCHA codes
+  const protonCode = error?.response?.data?.Code;
+  if (protonCode === 9001 || protonCode === 12087) return true;
+
+  // Check for HumanVerificationToken in Details
+  const details = error?.response?.data?.Details;
+  if (details?.HumanVerificationToken) return true;
+
+  return false;
+}
