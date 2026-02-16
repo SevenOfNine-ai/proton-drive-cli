@@ -7,6 +7,9 @@ dist/
 .idea/
 coverage/
 
+# Generated documentation
+docs/api/
+
 # Yarn 4
 .yarn/*
 !.yarn/patches
