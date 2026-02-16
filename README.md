@@ -2,6 +2,14 @@
 
 End-to-end encrypted CLI for Proton Drive with Git LFS bridge support, powered by the official `@protontech/drive-sdk`.
 
+[![Documentation](https://img.shields.io/badge/docs-unified-blue)](https://sevenofnine-ai.github.io/proton-drive-cli/) [![npm version](https://img.shields.io/npm/v/@sevenofnine-ai/proton-drive-cli.svg)](https://www.npmjs.com/package/@sevenofnine-ai/proton-drive-cli) [![Tests](https://github.com/SevenOfNine-ai/proton-drive-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/SevenOfNine-ai/proton-drive-cli/actions/workflows/ci.yml)
+
+## Documentation
+
+📚 **[Complete Documentation](https://sevenofnine-ai.github.io/proton-drive-cli/)** with:
+- **[TypeScript API Reference](https://sevenofnine-ai.github.io/proton-drive-cli/typescript/)** - Full TSDoc API documentation
+- **[Architecture & Guides](https://sevenofnine-ai.github.io/proton-drive-cli/guides/)** - Setup, security, operations
+
 ## Installation
 
 ```bash
